@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git clone *)",
+      "Bash(mdfind -name node)",
+      "Bash(grep -iE '/bin/node$')",
+      "Read(//Users/aliciachandra/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin/e2b41eca-2bb2-4100-896f-64751c7180d9/a3a76ba9-ce5b-4758-aa62-f5101556bdcb/**)",
+      "Read(//Users/aliciachandra/Library/Application Support/Claude/**)",
+      "Bash(sw_vers)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} in %{time_total}s\\\\n\" http://localhost:3000/)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(grep -E \"node_modules|\\\\.env$|\\\\.next/\")",
+      "Bash(git -c user.name=\"Alicia\" -c user.email=\"alicia.catelyn@gmail.com\" commit -q -F -)",
+      "Bash(git push *)",
+      "Bash(cp store.ts store.file.ts)",
+      "Bash(cp depositLedger.ts depositLedger.file.ts)",
+      "Bash(curl -s -X POST http://localhost:3000/api/deposits -H 'content-type: application/json' -d '{\"externalUserId\":\"u_you\"}' -w '\\\\nHTTP %{http_code}\\\\n')"
+    ]
+  }
+}
