@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import "./globals.css";
-import "@solana/wallet-adapter-react-ui/styles.css";
 import { Providers } from "./providers";
-import { SiwsButton } from "@/components/SiwsButton";
+import { TopNav } from "@/components/TopNav";
+import { CreateMarketModal } from "@/components/CreateMarketModal";
 
 export const metadata: Metadata = {
-  title: "Echo — social prediction markets",
+  title: "Echo — bet on the people around you",
   description:
-    "Socially-gated parimutuel prediction markets on Solana with Programmable Yield Routing.",
+    "Echo turns local gossip into liquid markets. Winners route a slice of their yield straight back to the person the bet is about — settled on Solana.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -16,26 +15,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <Providers>
-          <div className="container">
-            <header className="topbar">
-              <div className="brand">
-                <Link href="/" className="logo">
-                  echo<span className="dot">.</span>
-                </Link>
-                <nav className="nav-links">
-                  <Link href="/">Markets</Link>
-                  <Link href="/leaderboard">Leaderboard</Link>
-                </nav>
-              </div>
-              <div className="topbar-actions">
-                <Link href="/create" className="btn">
-                  + New market
-                </Link>
-                <SiwsButton />
-              </div>
-            </header>
-            <main>{children}</main>
-          </div>
+          <TopNav />
+          <main className="shell">{children}</main>
+          <CreateMarketModal />
         </Providers>
       </body>
     </html>

@@ -1,102 +1,139 @@
-import { prisma } from "@/lib/prisma";
+"use client";
 
-export const dynamic = "force-dynamic";
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useApp } from "../providers";
+import { users, subjects, marketsByCreator, type User } from "@/lib/mock";
+import { Avatar } from "@/components/primitives";
+import { UserName } from "@/components/UserName";
 
-interface BoardRow {
-  id: string;
-  username: string;
-  publicKey: string;
-  reputationScore: number;
-  marketsCreated: number;
-}
+type Category = "Top Forecasters" | "High Rollers" | "Market Makers" | "Yield Earners";
+const CATEGORIES: Category[] = ["Top Forecasters", "High Rollers", "Market Makers", "Yield Earners"];
 
-async function getBoard(): Promise<BoardRow[] | null> {
-  try {
-    const users = await prisma.user.findMany({
-      orderBy: [{ reputationScore: "desc" }, { createdAt: "asc" }],
-      take: 50,
-      select: {
-        id: true,
-        username: true,
-        publicKey: true,
-        reputationScore: true,
-        _count: { select: { marketsCreated: true } },
-      },
-    });
-    return users.map((u) => ({
-      id: u.id,
-      username: u.username,
-      publicKey: u.publicKey,
-      reputationScore: u.reputationScore,
-      marketsCreated: u._count.marketsCreated,
-    }));
-  } catch {
-    return null;
-  }
-}
+export default function LeaderboardPage() {
+  const { me, following } = useApp();
+  const [cat, setCat] = useState<Category>("Top Forecasters");
+  const [scope, setScope] = useState<"Global" | "Friends">("Global");
 
-function shortKey(k: string): string {
-  return `${k.slice(0, 4)}…${k.slice(-4)}`;
-}
-
-export default async function LeaderboardPage() {
-  const board = await getBoard();
-
-  if (board === null) {
-    return (
-      <div className="notice">
-        <p>
-          <strong>Database unreachable.</strong> Provision the social-state layer to rank
-          forecasters.
-        </p>
-      </div>
-    );
-  }
+  const pool = useMemo(() => {
+    if (scope === "Friends") return users.filter((u) => following.includes(u.id) || u.id === me.id);
+    return users;
+  }, [scope, following, me.id]);
 
   return (
     <div>
-      <div className="detail-head">
-        <h1>Leaderboard</h1>
-        <p className="dim" style={{ maxWidth: "56ch" }}>
-          Reputation accrues off-chain for durable contributions — creating markets, seeing them
-          resolve honestly, and seeding discussion. In the full protocol it gates the top-quartile
-          jury that arbitrates disputed markets.
-        </p>
+      <div className="page-head">
+        <div>
+          <h1>Leaderboard</h1>
+          <div className="page-sub">Who&apos;s calling it right around here.</div>
+        </div>
+        <div className="pills">
+          {(["Global", "Friends"] as const).map((s) => (
+            <button key={s} className={`pill ${scope === s ? "active" : ""}`} onClick={() => setScope(s)}>
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="pills" style={{ marginBottom: "1.1rem" }}>
+        {CATEGORIES.map((c) => (
+          <button key={c} className={`pill ${cat === c ? "active" : ""}`} onClick={() => setCat(c)}>
+            {c}
+          </button>
+        ))}
       </div>
 
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
-        {board.length === 0 ? (
-          <div className="notice" style={{ border: "none" }}>
-            No forecasters yet — connect a wallet and create the first market.
-          </div>
-        ) : (
-          <table className="board">
-            <thead>
-              <tr>
-                <th className="rank">#</th>
-                <th>Forecaster</th>
-                <th className="right">Markets</th>
-                <th className="right">Reputation</th>
-              </tr>
-            </thead>
-            <tbody>
-              {board.map((u, i) => (
-                <tr key={u.id}>
-                  <td className={`rank ${i < 3 ? `top${i + 1}` : ""}`}>{i + 1}</td>
-                  <td>
-                    <div className="username">@{u.username}</div>
-                    <div className="addr">{shortKey(u.publicKey)}</div>
-                  </td>
-                  <td className="right num">{u.marketsCreated}</td>
-                  <td className="right">
-                    <span className="rep-score">{u.reputationScore.toLocaleString()}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        {cat === "Yield Earners" ? <YieldTable /> : <UserTable pool={pool} cat={cat} meId={me.id} />}
       </div>
     </div>
+  );
+}
+
+function UserTable({ pool, cat, meId }: { pool: User[]; cat: Category; meId: string }) {
+  const metricVal = (u: User) => {
+    if (cat === "High Rollers") return u.totalVolumeBet;
+    if (cat === "Market Makers") return marketsByCreator(u.id).length;
+    return u.accuracy; // Top Forecasters
+  };
+  const metricLabel = cat === "High Rollers" ? "Volume" : cat === "Market Makers" ? "Markets" : "Accuracy";
+  const fmt = (u: User) =>
+    cat === "High Rollers"
+      ? `${u.totalVolumeBet} USDC`
+      : cat === "Market Makers"
+      ? `${marketsByCreator(u.id).length}`
+      : `${Math.round(u.accuracy * 100)}%`;
+  const trends = ["up", "up", "flat", "down"];
+  const sorted = [...pool].sort((a, b) => metricVal(b) - metricVal(a));
+
+  return (
+    <table className="board">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Forecaster</th>
+          <th className="right">Echo Score</th>
+          <th className="right">{metricLabel}</th>
+          <th className="right">Trend</th>
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map((u, i) => {
+          const trend = trends[i % trends.length];
+          return (
+            <tr key={u.id}>
+              <td className={`rank ${i < 3 ? `t${i + 1}` : ""}`}>{i + 1}</td>
+              <td>
+                <div className="row">
+                  <Avatar emoji={u.avatar} color={u.color} size={28} />
+                  <UserName username={u.username} />
+                  {u.id === meId && <span className="chip">you</span>}
+                </div>
+              </td>
+              <td className="right escore">{u.echoScore}</td>
+              <td className="right num">{fmt(u)}</td>
+              <td className={`right trend-${trend}`}>
+                {trend === "up" ? "▲" : trend === "down" ? "▼" : "—"}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+function YieldTable() {
+  const sorted = [...subjects].sort((a, b) => b.totalYieldEarned - a.totalYieldEarned);
+  return (
+    <table className="board">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Subject</th>
+          <th className="right">Markets</th>
+          <th className="right">Yield earned</th>
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map((s, i) => (
+          <tr key={s.wallet}>
+            <td className={`rank ${i < 3 ? `t${i + 1}` : ""}`}>{i + 1}</td>
+            <td>
+              <div className="row">
+                <Avatar emoji={s.avatar} color={s.color} size={28} />
+                <Link href={`/subject/${s.slug}`} className="uname">
+                  {s.name ?? "Unverified subject"}
+                </Link>
+                {s.verified && <span className="claimed">Claimed</span>}
+              </div>
+            </td>
+            <td className="right num">{s.marketCount}</td>
+            <td className="right escore">{s.totalYieldEarned.toFixed(1)} USDC</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

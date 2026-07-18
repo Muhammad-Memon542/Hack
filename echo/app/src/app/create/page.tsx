@@ -1,16 +1,16 @@
-import { CreateMarketForm } from "@/components/CreateMarketForm";
+"use client";
 
-export const dynamic = "force-dynamic";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useApp } from "../providers";
 
-export default function CreatePage() {
-  return (
-    <div className="panel" style={{ maxWidth: 560, margin: "0 auto" }}>
-      <h2>Create a market</h2>
-      <p className="dim" style={{ marginBottom: "1rem" }}>
-        One transaction allocates the market PDA and vault on-chain; the title and description live
-        in the social layer. Optionally set a subject wallet to enable Programmable Yield Routing.
-      </p>
-      <CreateMarketForm />
-    </div>
-  );
+// Single create entry point is the modal; this route just opens it.
+export default function CreateRedirect() {
+  const router = useRouter();
+  const { setCreateOpen } = useApp();
+  useEffect(() => {
+    setCreateOpen(true);
+    router.replace("/");
+  }, [router, setCreateOpen]);
+  return null;
 }

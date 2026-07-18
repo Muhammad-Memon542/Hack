@@ -1,75 +1,68 @@
+"use client";
+
 import Link from "next/link";
-import { formatUsdc } from "@/lib/accounts";
+import { useState } from "react";
+import {
+  yesPct,
+  volume,
+  userById,
+  categoryVisual,
+  type Market,
+} from "@/lib/mock";
+import { useApp } from "@/app/providers";
+import { StatusBadge } from "./primitives";
+import { UserName } from "./UserName";
+import { HeartIcon } from "./icons";
 
-export interface MarketRow {
-  id: string;
-  pdaAddress: string;
-  status: string;
-  resolutionDate: string | Date;
-  targetWallet: string | null;
-  metadata: { title?: string; description?: string; pools?: { yes: string; no: string } } | null;
-  creator: { username: string; publicKey: string };
+function shortDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
 }
 
-function shortKey(k: string): string {
-  return `${k.slice(0, 4)}…${k.slice(-4)}`;
-}
-
-/** Server Component: renders off-chain state; live odds hydrate on the detail page. */
-export function MarketCard({ market }: { market: MarketRow }) {
-  const title = market.metadata?.title ?? "Untitled market";
-  const pools = market.metadata?.pools;
-  let yesPct: number | null = null;
-  let volume: bigint | null = null;
-  if (pools) {
-    const yes = BigInt(pools.yes);
-    const total = yes + BigInt(pools.no);
-    volume = total;
-    if (total > 0n) yesPct = Math.round(Number((yes * 100n) / total));
-  }
+export function MarketCard({ market }: { market: Market }) {
+  const { isFollowingMarket, toggleFollowMarket } = useApp();
+  const creator = userById(market.creatorId);
+  const saved = isFollowingMarket(market.id);
+  const [imgOk, setImgOk] = useState(true);
+  const vis = categoryVisual(market.category);
+  const yes = yesPct(market);
+  const settled = market.status === "SETTLED";
 
   return (
-    <Link href={`/market/${market.id}`}>
-      <article className="card">
-        <div className="spread">
-          <span className={`chip ${market.status}`}>{market.status}</span>
-          {volume !== null && (
-            <span className="faint num" style={{ fontSize: "0.78rem" }}>
-              {formatUsdc(volume)} USDC
-            </span>
-          )}
-        </div>
-        <h3>{title}</h3>
-
-        {yesPct !== null ? (
-          <div>
-            <div className="odds-bar" style={{ marginBottom: "0.4rem" }}>
-              <div style={{ width: `${yesPct}%` }} />
-            </div>
-            <div className="odds-legend">
-              <span className="yes">YES {yesPct}%</span>
-              <span className="no">NO {100 - yesPct}%</span>
-            </div>
-          </div>
+    <div className="mcard">
+      <Link href={`/market/${market.id}`} className="mcard-img" style={{ background: vis.grad }}>
+        {!imgOk || !market.image ? (
+          <span className="mcard-fallback">{vis.emoji}</span>
         ) : (
-          <div className="faint" style={{ fontSize: "0.85rem" }}>
-            No liquidity yet — set the line.
-          </div>
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={market.image} alt="" loading="lazy" onError={() => setImgOk(false)} />
         )}
-
-        <div className="card-foot">
-          <div className="meta">
-            <span>@{market.creator.username}</span>
-            <span>·</span>
-            <span>resolves {new Date(market.resolutionDate).toLocaleDateString()}</span>
-          </div>
-          {market.targetWallet && (
-            <div style={{ marginTop: "0.5rem" }}>
-              <span className="pyr-badge">⚡ yield routes to {shortKey(market.targetWallet)}</span>
-            </div>
-          )}
+        <StatusBadge status={market.status} />
+        <div className="mcard-bar">
+          <div className="mcard-bar-fill" style={{ width: `${yes}%` }} />
         </div>
-      </article>
-    </Link>
+      </Link>
+
+      <button
+        className={`heart ${saved ? "on" : ""}`}
+        aria-label={saved ? "unsave" : "save"}
+        onClick={() => toggleFollowMarket(market.id)}
+      >
+        <HeartIcon filled={saved} />
+      </button>
+
+      <div className="mcard-body">
+        <Link href={`/market/${market.id}`} className="mcard-q">
+          <span>{market.question}</span>
+          <span className="mcard-pct"><span className="star">★</span> {yes}%</span>
+        </Link>
+        {creator && <UserName username={creator.username} className="mcard-creator" />}
+        <div className="mcard-resolve">
+          {settled ? "Resolved" : "Resolves"} {shortDate(settled && market.resolvedAt ? market.resolvedAt : market.closesAt)}
+        </div>
+        <div className="mcard-vol">
+          <b>${volume(market).toFixed(2)}</b> USDC volume
+        </div>
+      </div>
+    </div>
   );
 }

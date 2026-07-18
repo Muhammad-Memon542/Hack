@@ -1,125 +1,93 @@
-import Link from "next/link";
-import { prisma } from "@/lib/prisma";
-import { MarketCard, type MarketRow } from "@/components/MarketCard";
-import { StatusTabs } from "@/components/StatusTabs";
-import { formatUsdc } from "@/lib/accounts";
+"use client";
 
-export const dynamic = "force-dynamic";
+import { useMemo, useState } from "react";
+import { useApp } from "./providers";
+import { volume, subjectByWallet, userById, type Market } from "@/lib/mock";
+import { MarketCard } from "@/components/MarketCard";
+import { SearchBar } from "@/components/SearchBar";
+import { CategoryRow, type FilterKey } from "@/components/CategoryRow";
+import { ClockIcon, ChevronLeft, ChevronRight } from "@/components/icons";
 
-const STATUSES = ["OPEN", "LOCKED", "RESOLVING", "DISPUTED", "SETTLED"] as const;
+const PAGE_SIZE = 6;
+const STATUS_FILTERS: Record<string, Market["status"]> = {
+  Open: "OPEN",
+  Resolving: "RESOLVING",
+  Settled: "SETTLED",
+};
+const CATEGORY_FILTERS = new Set(["Sports", "Tech", "Crypto", "Politics"]);
 
-interface HomeData {
-  markets: MarketRow[];
-  stats: { total: number; open: number; volume: bigint; forecasters: number };
-}
+export default function BrowsePage() {
+  const { markets } = useApp();
+  const [filter, setFilter] = useState<FilterKey>("All");
+  const [question, setQuestion] = useState("");
+  const [subject, setSubject] = useState("");
+  const [dateRange, setDateRange] = useState("");
+  const [page, setPage] = useState(0);
 
-async function getData(status: string): Promise<HomeData | null> {
-  try {
-    const where = STATUSES.includes(status as never) ? { status: status as never } : undefined;
-    const [markets, all, forecasters] = await Promise.all([
-      prisma.market.findMany({
-        where,
-        include: { creator: { select: { username: true, publicKey: true } } },
-        orderBy: [{ status: "asc" }, { resolutionDate: "asc" }],
-        take: 60,
-      }),
-      prisma.market.findMany({ select: { status: true, metadata: true } }),
-      prisma.user.count(),
-    ]);
+  const filtered = useMemo(() => {
+    let list = [...markets];
+    if (STATUS_FILTERS[filter]) list = list.filter((m) => m.status === STATUS_FILTERS[filter]);
+    else if (CATEGORY_FILTERS.has(filter)) list = list.filter((m) => m.category === filter);
 
-    let volume = 0n;
-    for (const m of all) {
-      const pools = (m.metadata as { pools?: { yes: string; no: string } } | null)?.pools;
-      if (pools) volume += BigInt(pools.yes) + BigInt(pools.no);
-    }
+    const q = question.trim().toLowerCase();
+    if (q) list = list.filter((m) => m.question.toLowerCase().includes(q));
 
-    return {
-      markets: markets as unknown as MarketRow[],
-      stats: {
-        total: all.length,
-        open: all.filter((m) => m.status === "OPEN").length,
-        volume,
-        forecasters,
-      },
-    };
-  } catch {
-    return null;
-  }
-}
+    const s = subject.trim().toLowerCase();
+    if (s)
+      list = list.filter((m) => {
+        const creator = userById(m.creatorId);
+        const subj = subjectByWallet(m.subjectWallet);
+        return (
+          creator?.username.toLowerCase().includes(s) ||
+          (subj?.name ?? "").toLowerCase().includes(s) ||
+          (m.subjectWallet ?? "").toLowerCase().includes(s)
+        );
+      });
 
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams: { status?: string };
-}) {
-  const active = (searchParams.status ?? "").toUpperCase();
-  const data = await getData(active);
+    return list.sort((a, b) => volume(b) - volume(a));
+  }, [markets, filter, question, subject]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const visible = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
+  const onFilter = (k: FilterKey) => {
+    setFilter(k);
+    setPage(0);
+  };
 
   return (
     <div>
-      <section className="hero">
-        <h1>
-          Bet on the <span className="accent-word">people</span> around you.
-        </h1>
-        <p>
-          Echo turns local gossip into liquid markets. Winners route a slice of their yield straight
-          back to the person the bet is about — a closed-loop funding mechanism, settled on Solana.
-        </p>
-        <div className="hero-cta">
-          <Link href="/create" className="btn btn-primary">
-            Create a market
-          </Link>
-          <Link href="/leaderboard" className="btn btn-ghost">
-            View leaderboard
-          </Link>
-        </div>
-      </section>
+      <SearchBar
+        question={question}
+        setQuestion={(v) => { setQuestion(v); setPage(0); }}
+        subject={subject}
+        setSubject={(v) => { setSubject(v); setPage(0); }}
+        dateRange={dateRange}
+        setDateRange={setDateRange}
+      />
 
-      {data && (
-        <div className="stats">
-          <div className="stat">
-            <div className="label">Markets</div>
-            <div className="value">{data.stats.total}</div>
-          </div>
-          <div className="stat">
-            <div className="label">Open now</div>
-            <div className="value">{data.stats.open}</div>
-          </div>
-          <div className="stat">
-            <div className="label">Volume</div>
-            <div className="value">
-              {formatUsdc(data.stats.volume)} <small>USDC</small>
-            </div>
-          </div>
-          <div className="stat">
-            <div className="label">Forecasters</div>
-            <div className="value">{data.stats.forecasters}</div>
-          </div>
-        </div>
-      )}
+      <CategoryRow active={filter} onSelect={onFilter} />
 
-      <div className="section-head">
-        <h2>Markets</h2>
-        <StatusTabs active={active} />
+      <div className="trend-head">
+        <h2>
+          <ClockIcon size={22} /> Trending predictions
+        </h2>
+        <div className="carousel-btns">
+          <button aria-label="previous" disabled={safePage === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
+            <ChevronLeft />
+          </button>
+          <button aria-label="next" disabled={safePage >= pageCount - 1} onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}>
+            <ChevronRight />
+          </button>
+        </div>
       </div>
 
-      {data === null ? (
-        <div className="notice">
-          <p>
-            <strong>Database unreachable.</strong>
-          </p>
-          <p style={{ marginTop: "0.5rem" }}>
-            Set <code>DATABASE_URL</code> in <code>app/.env</code> and run{" "}
-            <code>npx prisma migrate dev</code> to provision the social-state layer.
-          </p>
-        </div>
-      ) : data.markets.length === 0 ? (
-        <div className="notice">
-          <p>No markets here yet. Create one and let your friends take the other side.</p>
-        </div>
+      {visible.length === 0 ? (
+        <div className="empty">No predictions match your filters.</div>
       ) : (
         <div className="market-grid">
-          {data.markets.map((m) => (
+          {visible.map((m) => (
             <MarketCard key={m.id} market={m} />
           ))}
         </div>
