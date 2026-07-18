@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  publicKey       String    @unique @db.VarChar(44)
+  nonce           String    @default(dbgenerated("gen_random_uuid()")) // For SIWS (Sign-In With Solana)
+  username        String    @unique @db.VarChar(32)
+  reputationScore Int       @default(0)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  marketsCreated  Market[]  @relation("MarketCreator")
+  comments        Comment[]
+
+  @@index([publicKey])
+  @@index([reputationScore(sort: Desc)])
+}
+
+model Market {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pdaAddress     String    @unique @db.VarChar(44)
+  creatorId      String    @db.Uuid
+  creator        User      @relation("MarketCreator", fields: [creatorId], references: [id])
+  metadata       Json      @db.JsonB // Stores title, description, image URIs
+  status         StateEnum @default(OPEN)
+  resolutionDate DateTime  @db.Timestamptz(6)
+  targetWallet   String?   @db.VarChar(44) // Optional yield routing target
+  comments       Comment[]
+
+  @@index([status, resolutionDate])
+  @@index([creatorId])
+}
+
+model Comment {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  marketId  String   @db.Uuid
+  userId    String   @db.Uuid
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([marketId, createdAt(sort: Desc)])
+}
+
+enum StateEnum {
+  OPEN
+  LOCKED
+  RESOLVING
+  DISPUTED
+  SETTLED
+}
