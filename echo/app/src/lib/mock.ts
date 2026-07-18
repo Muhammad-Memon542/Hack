@@ -112,6 +112,22 @@ export interface AppNotification {
   createdAt: string;
 }
 
+// ---------- activity (social feed) ----------
+export type ActivityType = "bet" | "new_market" | "comment" | "follow" | "resolution";
+
+export interface ActivityEvent {
+  id: string;
+  type: ActivityType;
+  userId: string; // actor
+  marketId?: string;
+  targetUserId?: string;
+  commentId?: string;
+  side?: Side;
+  amount?: number;
+  content?: string;
+  createdAt: string;
+}
+
 // ---------- time helpers ----------
 const now = new Date("2026-07-18T12:00:00Z").getTime();
 const hoursAgo = (h: number) => new Date(now - h * 3600_000).toISOString();
@@ -706,6 +722,35 @@ export const notifications: AppNotification[] = [
     createdAt: daysAgo(2),
   },
 ];
+
+// ================= server hydration =================
+// The app's pure helpers below read these module-level arrays. On the client we
+// replace their contents in place with the live server snapshot so every helper
+// (positionsFor, buildFeed, marketsByCreator, …) reflects real state without
+// rewriting each call site. Providers triggers re-renders via React state.
+export function hydrateFromServer(snap: {
+  users?: User[];
+  markets?: Market[];
+  positions?: Position[];
+  comments?: Comment[];
+}) {
+  if (snap.users) {
+    users.length = 0;
+    users.push(...snap.users);
+  }
+  if (snap.markets) {
+    markets.length = 0;
+    markets.push(...snap.markets);
+  }
+  if (snap.positions) {
+    positions.length = 0;
+    positions.push(...snap.positions);
+  }
+  if (snap.comments) {
+    comments.length = 0;
+    comments.push(...snap.comments);
+  }
+}
 
 // ================= helpers =================
 

@@ -5,7 +5,6 @@ import { useApp } from "@/app/providers";
 import {
   relativeTime,
   userById,
-  positionsFor,
   type Comment,
   type Market,
 } from "@/lib/mock";
@@ -113,7 +112,7 @@ function buildTree(list: Comment[], sort: SortMode): Node[] {
 }
 
 function CommentNode({ node, market, depth }: { node: Node; market: Market; depth: number }) {
-  const { connected, addComment, me } = useApp();
+  const { connected, addComment, me, positions, likesFor, hasLiked, toggleLike } = useApp();
   const [replying, setReplying] = useState(false);
   const [draft, setDraft] = useState("");
   const [showAll, setShowAll] = useState(false);
@@ -123,7 +122,7 @@ function CommentNode({ node, market, depth }: { node: Node; market: Market; dept
   if (!author) return null;
 
   // Position tag with privacy check.
-  const authorPos = positionsFor(market.id).find((p) => p.userId === author.id);
+  const authorPos = positions.find((p) => p.marketId === market.id && p.userId === author.id);
   const canReveal =
     authorPos &&
     !author.privacy.hidePositions &&
@@ -151,6 +150,15 @@ function CommentNode({ node, market, depth }: { node: Node; market: Market; dept
       <div className="comment-body">{node.comment.content}</div>
 
       <div className="comment-actions">
+        <button
+          onClick={() => connected && toggleLike(node.comment.id)}
+          style={hasLiked(node.comment.id) ? { color: "var(--accent)" } : undefined}
+        >
+          {hasLiked(node.comment.id) ? "♥" : "♡"} Like
+          {likesFor(node.comment.id) > 0 && (
+            <span className="tip-badge">· {likesFor(node.comment.id)}</span>
+          )}
+        </button>
         {!atMaxDepth && connected && (
           <button onClick={() => setReplying((v) => !v)}>Reply</button>
         )}

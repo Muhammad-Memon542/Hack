@@ -17,5 +17,8 @@ node_modules/
 .env.local
 .env*.local
 
+# Local file-backed deposit ledger (dev only; use a DB in production)
+.data/
+
 # Misc
 .DS_Store

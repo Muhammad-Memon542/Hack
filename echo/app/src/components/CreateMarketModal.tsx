@@ -44,21 +44,18 @@ export function CreateMarketModal() {
     setSubmitting(false);
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     const wallet = subjectWallet.trim() === "" ? null : subjectWallet.trim();
-    const id = createMarket({
+    const id = await createMarket({
       question: question.trim(),
       description: criteria.trim(),
       closesAt: new Date(closesAt).toISOString(),
       subjectWallet: wallet,
     });
-    // simulate on-chain confirmation latency
-    setTimeout(() => {
-      close();
-      router.push(`/market/${id}`);
-    }, 700);
+    close();
+    if (id) router.push(`/market/${id}`);
   };
 
   return (

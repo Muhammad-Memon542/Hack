@@ -1,51 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
-import { awardReputation, REP } from "@/lib/reputation";
+import { createMarket } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
-  const status = req.nextUrl.searchParams.get("status");
-  const markets = await prisma.market.findMany({
-    where: status ? { status: status as never } : undefined,
-    include: { creator: { select: { username: true, publicKey: true } } },
-    orderBy: { resolutionDate: "asc" },
-    take: 100,
-  });
-  return NextResponse.json({ markets });
-}
-
-/**
- * Registers the off-chain row for a market whose PDA was just initialized
- * on-chain by the caller's wallet.
- */
+/** POST /api/markets — create a market (persisted server-side). */
 export async function POST(req: NextRequest) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  const body = await req.json().catch(() => ({}));
+  const userId = String(body?.userId ?? "").trim();
+  const question = String(body?.question ?? "").trim();
+  const description = String(body?.description ?? "").trim();
+  const closesAt = String(body?.closesAt ?? "").trim();
+  const subjectWallet = body?.subjectWallet ? String(body.subjectWallet).trim() : null;
+  const category = body?.category;
 
-  const body = await req.json().catch(() => null);
-  const { pdaAddress, metadata, resolutionDate, targetWallet } = body ?? {};
-  if (typeof pdaAddress !== "string" || !metadata || typeof resolutionDate !== "string") {
-    return NextResponse.json(
-      { error: "pdaAddress, metadata, resolutionDate required" },
-      { status: 400 }
-    );
-  }
-  const resolution = new Date(resolutionDate);
-  if (Number.isNaN(resolution.getTime())) {
-    return NextResponse.json({ error: "invalid resolutionDate" }, { status: 400 });
+  if (!userId || question.length < 6 || description.length < 6 || !closesAt) {
+    return NextResponse.json({ error: "missing or too-short fields" }, { status: 400 });
   }
 
-  const market = await prisma.market.create({
-    data: {
-      pdaAddress,
-      creatorId: session.sub,
-      metadata,
-      resolutionDate: resolution,
-      targetWallet: typeof targetWallet === "string" && targetWallet ? targetWallet : null,
-    },
+  const res = await createMarket({
+    userId,
+    question,
+    description,
+    closesAt,
+    subjectWallet,
+    category,
   });
-  await awardReputation(session.sub, REP.CREATE_MARKET);
-  return NextResponse.json({ market }, { status: 201 });
+  if (!res.ok) return NextResponse.json({ error: res.error }, { status: 400 });
+  return NextResponse.json({ ok: true, market: res.market });
 }

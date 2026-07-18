@@ -79,9 +79,10 @@ export function FeedCard({ item }: { item: FeedItem }) {
             </button>
             <button
               className="btn btn-sm btn-primary"
-              onClick={() => {
-                placeBet(market.id, item.data.side as "YES" | "NO", 10);
-                go();
+              onClick={async () => {
+                const res = await placeBet(market.id, item.data.side as "YES" | "NO", 10);
+                if (res.ok) go();
+                else alert(res.error === "insufficient balance" ? "Add funds to copy this bet." : res.error);
               }}
             >
               Copy bet

@@ -26,7 +26,8 @@ function initials(username: string) {
 export function TopNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const { connected, connect, disconnect, me, unreadCount, setCreateOpen } = useApp();
+  const { connected, connect, disconnect, me, unreadCount, setCreateOpen, balanceUsdc, setDepositOpen } =
+    useApp();
   const [openMenu, setOpenMenu] = useState<null | "bell" | "avatar">(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -53,6 +54,16 @@ export function TopNav() {
 
           {connected ? (
             <>
+              <button
+                className="balance-pill"
+                onClick={() => setDepositOpen(true)}
+                aria-label="add funds"
+                title="Add funds via Unifold"
+              >
+                <span className="balance-amt">${balanceUsdc.toFixed(2)}</span>
+                <span className="balance-plus">+ Add</span>
+              </button>
+
               <div style={{ position: "relative" }}>
                 <button className="icon-round" aria-label="notifications" onClick={() => setOpenMenu(openMenu === "bell" ? null : "bell")}>
                   <BellIcon />

@@ -2,18 +2,21 @@
 
 import { useState } from "react";
 import { useApp } from "@/app/providers";
-import { estimatedReturn, yesPct, positionsFor, type Market, type Side } from "@/lib/mock";
+import { estimatedReturn, yesPct, type Market, type Side } from "@/lib/mock";
 
 export function BetPanel({ market }: { market: Market }) {
-  const { connected, connect, placeBet, me } = useApp();
+  const { connected, connect, placeBet, me, balanceUsdc, setDepositOpen, positions } = useApp();
   const [side, setSide] = useState<Side>("YES");
   const [amount, setAmount] = useState("10");
   const [placed, setPlaced] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const yes = yesPct(market);
   const amt = Number(amount) || 0;
   const est = estimatedReturn(market, side, amt);
-  const myPositions = positionsFor(market.id).filter((p) => p.userId === me.id);
+  const myPositions = positions.filter((p) => p.marketId === market.id && p.userId === me.id);
+  const insufficient = amt > balanceUsdc;
 
   const resolved = market.status === "SETTLED" || market.status === "DISPUTED";
   const closed = market.status !== "OPEN";
@@ -80,7 +83,12 @@ export function BetPanel({ market }: { market: Market }) {
       </div>
 
       <div className="field" style={{ marginBottom: "0.4rem" }}>
-        <label>Amount (USDC)</label>
+        <label>
+          Amount (USDC)
+          <span className="dim" style={{ float: "right", fontWeight: 600 }}>
+            Balance: ${balanceUsdc.toFixed(2)}
+          </span>
+        </label>
         <input
           type="number"
           min={1}
@@ -95,17 +103,39 @@ export function BetPanel({ market }: { market: Market }) {
         <b className="num">{est.toFixed(2)} USDC</b>
       </div>
 
+      {!closed && insufficient && amt > 0 && (
+        <div className="info-box warn" style={{ margin: "0.6rem 0" }}>
+          Not enough balance ({`$${balanceUsdc.toFixed(2)}`}).{" "}
+          <button
+            className="link-btn"
+            onClick={() => setDepositOpen(true)}
+            style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", padding: 0, fontWeight: 700 }}
+          >
+            Add funds
+          </button>
+        </div>
+      )}
+
       <button
         className={`btn btn-block ${side === "YES" ? "btn-yes" : "btn-no"}`}
-        disabled={closed || amt <= 0}
-        onClick={() => {
-          placeBet(market.id, side, amt);
+        disabled={closed || amt <= 0 || insufficient || submitting}
+        onClick={async () => {
+          setError(null);
+          setSubmitting(true);
+          const res = await placeBet(market.id, side, amt);
+          setSubmitting(false);
+          if (!res.ok) {
+            setError(res.error === "insufficient balance" ? "Not enough balance." : res.error ?? "Bet failed");
+            return;
+          }
           setPlaced(`Bet ${amt} USDC on ${side}`);
           setTimeout(() => setPlaced(null), 2200);
         }}
       >
-        Bet {amt || 0} USDC on {side}
+        {submitting ? "Placing…" : `Bet ${amt || 0} USDC on ${side}`}
       </button>
+
+      {error && <div className="hint err" style={{ marginTop: "0.5rem" }}>{error}</div>}
 
       {myPositions.length > 0 && (
         <div className="info-box" style={{ marginTop: "0.9rem" }}>

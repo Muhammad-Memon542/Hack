@@ -112,6 +112,20 @@ button { font: inherit; }
   cursor: pointer; transition: all 0.14s;
 }
 .avatar-pill:hover { box-shadow: var(--shadow); }
+
+/* Unifold-funded balance pill */
+.balance-pill {
+  display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.4rem 0.35rem 0.75rem;
+  border: 1px solid var(--border-bright); border-radius: var(--r-pill); background: var(--card);
+  cursor: pointer; transition: all 0.14s;
+}
+.balance-pill:hover { box-shadow: var(--shadow); border-color: var(--text-faint); }
+.balance-amt { font-weight: 800; font-size: 0.9rem; color: var(--text); font-variant-numeric: tabular-nums; }
+.balance-plus {
+  font-size: 0.78rem; font-weight: 700; color: #fff; padding: 0.2rem 0.55rem; border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-bright));
+}
+
 .burger { display: inline-flex; flex-direction: column; gap: 3px; }
 .burger span { width: 15px; height: 2px; background: var(--text-dim); border-radius: 2px; }
 
