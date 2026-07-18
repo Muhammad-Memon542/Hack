@@ -3,46 +3,32 @@
 import { SearchIcon } from "./icons";
 
 export function SearchBar({
-  question,
-  setQuestion,
-  subject,
-  setSubject,
-  dateRange,
-  setDateRange,
+  query,
+  setQuery,
   onSubmit,
 }: {
-  question: string;
-  setQuestion: (v: string) => void;
-  subject: string;
-  setSubject: (v: string) => void;
-  dateRange: string;
-  setDateRange: (v: string) => void;
+  query: string;
+  setQuery: (v: string) => void;
   onSubmit?: () => void;
 }) {
   return (
     <div className="searchbar">
-      <div className="search-seg">
-        <label>Question</label>
-        <input
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && onSubmit?.()}
-          placeholder="Search predictions"
-        />
-      </div>
-      <div className="search-seg">
-        <label>Resolution</label>
-        <input value={dateRange} onChange={(e) => setDateRange(e.target.value)} placeholder="Add date range" />
-      </div>
-      <div className="search-seg">
-        <label>Subject</label>
-        <input
-          value={subject}
-          onChange={(e) => setSubject(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && onSubmit?.()}
-          placeholder="Add wallet or user"
-        />
-      </div>
+      <span className="search-lead">
+        <SearchIcon size={20} />
+      </span>
+      <input
+        className="search-input"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && onSubmit?.()}
+        placeholder="Search predictions by keyword, creator, or subject"
+        aria-label="Search predictions"
+      />
+      {query && (
+        <button className="search-clear" aria-label="clear search" onClick={() => setQuery("")}>
+          ✕
+        </button>
+      )}
       <button className="search-go" aria-label="search" onClick={onSubmit}>
         <SearchIcon size={20} />
       </button>
