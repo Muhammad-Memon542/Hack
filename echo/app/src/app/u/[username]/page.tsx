@@ -49,7 +49,7 @@ export default function ProfilePage() {
       <div className="panel">
         <div className="between">
           <div className="row" style={{ gap: "1rem" }}>
-            <Avatar emoji={user.avatar} color={user.color} size={64} />
+            <Avatar emoji={user.avatar} color={user.color} size={64} src={user.picture} />
             <div>
               <h1 style={{ fontSize: "1.4rem", fontWeight: 800 }}>@{user.username}</h1>
               <p className="bio" style={{ maxWidth: "48ch" }}>{user.bio}</p>

@@ -53,7 +53,7 @@ export default function ForYouPage() {
             {suggestions.map((u) => (
               <div key={u.id} className="between" style={{ background: "var(--card)", padding: "0.8rem 1rem", borderRadius: "var(--r-btn)", border: "1px solid var(--border)" }}>
                 <div className="row">
-                  <Avatar emoji={u.avatar} color={u.color} size={38} />
+                  <Avatar emoji={u.avatar} color={u.color} size={38} src={u.picture} />
                   <div>
                     <Link href={`/u/${u.username}`} className="uname">@{u.username}</Link>
                     <div className="faint" style={{ fontSize: "0.8rem" }}>

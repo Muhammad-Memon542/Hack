@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useUser } from "@auth0/nextjs-auth0";
 import {
   users as seedUsers,
   markets as seedMarkets,
@@ -9,6 +10,8 @@ import {
   notifications as seedNotifications,
   CURRENT_USER_ID,
   hydrateFromServer,
+  setCurrentUserIdentity,
+  deriveHandle,
   type Market,
   type Position,
   type Comment,
@@ -30,10 +33,22 @@ interface MutationResult {
   error?: string;
 }
 
+export interface AuthIdentity {
+  name: string;
+  email: string | null;
+  picture: string | null;
+}
+
 interface AppState {
   connected: boolean;
   connect: () => void;
   disconnect: () => void;
+  /** Real Auth0 identity when logged in via Auth0 (null in demo mode). */
+  authUser: AuthIdentity | null;
+  /** Whether Auth0 is configured (NEXT_PUBLIC_AUTH0_ENABLED=true). */
+  authEnabled: boolean;
+  /** Log out of Auth0 (or exit demo mode when Auth0 is off). */
+  logout: () => void;
   me: User;
   users: User[];
 
@@ -99,6 +114,8 @@ interface Snapshot {
 
 const seedUser = seedUsers.find((u) => u.id === CURRENT_USER_ID)!;
 
+const AUTH0_ENABLED = process.env.NEXT_PUBLIC_AUTH0_ENABLED === "true";
+
 export function Providers({ children }: { children: React.ReactNode }) {
   // Server-backed world state (seeded locally for first paint / SSR parity).
   const [users, setUsers] = useState<User[]>(seedUsers);
@@ -121,6 +138,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+
+  // Auth0 session (v4). When Auth0 is enabled it is the source of truth for
+  // whether the user is signed in; otherwise the demo `connected` flag is.
+  const { user: auth0User } = useUser();
+  const authUser = useMemo<AuthIdentity | null>(
+    () =>
+      auth0User
+        ? {
+            name: (auth0User.name as string) ?? (auth0User.email as string) ?? "Member",
+            email: (auth0User.email as string) ?? null,
+            picture: (auth0User.picture as string) ?? null,
+          }
+        : null,
+    [auth0User]
+  );
 
   const applySnapshot = useCallback((snap: Snapshot) => {
     hydrateFromServer(snap); // keep mock helpers (buildFeed, positionsFor, …) in sync
@@ -166,6 +198,34 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     refreshState();
   }, [refreshState]);
+
+  // When Auth0 is enabled, mirror its session into the app's `connected` gate
+  // and overlay the signed-in identity onto the current-user record so the
+  // whole app shows "you" (name, @handle, avatar) instead of the demo user.
+  useEffect(() => {
+    if (!AUTH0_ENABLED) return;
+    setConnected(!!authUser);
+    if (authUser) {
+      setCurrentUserIdentity({
+        username: deriveHandle({ email: authUser.email, name: authUser.name }),
+        picture: authUser.picture,
+        bio: authUser.email ?? undefined,
+      });
+    } else {
+      setCurrentUserIdentity(null);
+    }
+    // Re-clone the current-user object so context consumers re-render with the
+    // freshly-mutated identity fields.
+    setUsers((prev) => prev.map((u) => (u.id === CURRENT_USER_ID ? { ...u } : u)));
+  }, [authUser]);
+
+  const logout = useCallback(() => {
+    if (AUTH0_ENABLED) {
+      window.location.href = "/auth/logout";
+    } else {
+      setConnected(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -335,6 +395,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     connected,
     connect: () => setConnected(true),
     disconnect: () => setConnected(false),
+    authUser,
+    authEnabled: AUTH0_ENABLED,
+    logout,
     me,
     users,
     following,

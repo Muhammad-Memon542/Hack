@@ -136,7 +136,7 @@ function CommentNode({ node, market, depth }: { node: Node; market: Market; dept
   return (
     <div className="comment">
       <div className="comment-head">
-        <Avatar emoji={author.avatar} color={author.color} size={22} />
+        <Avatar emoji={author.avatar} color={author.color} size={22} src={author.picture} />
         <UserName username={author.username} />
         {canReveal && (
           <span className={`pos-tag ${authorPos!.side.toLowerCase()}`}>

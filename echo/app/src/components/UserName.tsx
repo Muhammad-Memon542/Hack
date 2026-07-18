@@ -69,7 +69,7 @@ export function UserName({ username, className }: { username: string; className?
           onMouseLeave={scheduleClose}
         >
           <div className="row" style={{ gap: "0.6rem" }}>
-            <Avatar emoji={user.avatar} color={user.color} size={40} />
+            <Avatar emoji={user.avatar} color={user.color} size={40} src={user.picture} />
             <div>
               <Link href={`/u/${username}`} className="uname" style={{ fontSize: "0.95rem" }}>
                 @{user.username}

@@ -95,7 +95,7 @@ function ActivityTab({ friends }: { friends: User[] }) {
         return (
           <div key={i} className="feed-card">
             <div className="feed-line">
-              <Avatar emoji={u.avatar} color={u.color} size={24} />
+              <Avatar emoji={u.avatar} color={u.color} size={24} src={u.picture} />
               <UserName username={u.username} />
               {e.kind === "bet" ? (
                 <>
@@ -173,7 +173,7 @@ function FriendsLeaderboard({ friends, me }: { friends: User[]; me: User }) {
                 <td className={`rank ${i < 3 ? `t${i + 1}` : ""}`}>{i + 1}</td>
                 <td>
                   <div className="row">
-                    <Avatar emoji={u.avatar} color={u.color} size={26} />
+                    <Avatar emoji={u.avatar} color={u.color} size={26} src={u.picture} />
                     <UserName username={u.username} />
                     {u.id === me.id && <span className="chip">you</span>}
                   </div>
@@ -251,7 +251,7 @@ function Recommendations({
         {recs.map((u, i) => (
           <div key={u.id} className="between" style={{ background: "var(--card-2)", padding: "0.75rem 1rem", borderRadius: "var(--r-btn)" }}>
             <div className="row">
-              <Avatar emoji={u.avatar} color={u.color} size={34} />
+              <Avatar emoji={u.avatar} color={u.color} size={34} src={u.picture} />
               <div>
                 <UserName username={u.username} />
                 <div className="faint" style={{ fontSize: "0.78rem" }}>

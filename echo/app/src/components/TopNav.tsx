@@ -16,17 +16,10 @@ const SECTIONS = [
   { href: "/leaderboard", label: "Leaderboard" },
 ];
 
-function initials(username: string) {
-  const parts = username.split("_");
-  const a = parts[0]?.[0] ?? "";
-  const b = parts[1]?.[0] ?? parts[0]?.[1] ?? "";
-  return (a + b).toUpperCase();
-}
-
 export function TopNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const { connected, connect, disconnect, me, unreadCount, setCreateOpen, balanceUsdc, setDepositOpen } =
+  const { connected, me, authUser, logout, unreadCount, setCreateOpen, balanceUsdc, setDepositOpen } =
     useApp();
   const [openMenu, setOpenMenu] = useState<null | "bell" | "avatar">(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -79,13 +72,15 @@ export function TopNav() {
               <div style={{ position: "relative" }}>
                 <button className="avatar-pill" onClick={() => setOpenMenu(openMenu === "avatar" ? null : "avatar")} aria-label="account">
                   <span className="burger"><span /><span /><span /></span>
-                  <Avatar emoji={initials(me.username)} color={me.color} size={30} />
+                  <Avatar emoji={me.avatar} color={me.color} size={30} src={me.picture} />
                 </button>
                 {openMenu === "avatar" && (
                   <div className="menu">
                     <div className="menu-head">
-                      <div style={{ fontWeight: 800 }}>@{me.username}</div>
-                      <div className="faint" style={{ fontSize: "0.8rem" }}>Echo Score {me.echoScore}</div>
+                      <div style={{ fontWeight: 800 }}>{authUser ? authUser.name : `@${me.username}`}</div>
+                      <div className="faint" style={{ fontSize: "0.8rem" }}>
+                        {authUser?.email ?? `Echo Score ${me.echoScore}`}
+                      </div>
                     </div>
                     <div className="menu-sep" />
                     {SECTIONS.map((s) => (
@@ -101,13 +96,13 @@ export function TopNav() {
                     <button className="menu-item" onClick={() => { router.push(`/u/${me.username}`); setOpenMenu(null); }}>👤 Profile</button>
                     <button className="menu-item" onClick={() => { router.push("/settings"); setOpenMenu(null); }}>⚙️ Settings</button>
                     <div className="menu-sep" />
-                    <button className="menu-item" onClick={() => { disconnect(); setOpenMenu(null); }}>⏻ Disconnect</button>
+                    <button className="menu-item" onClick={() => { logout(); setOpenMenu(null); }}>⏻ Log out</button>
                   </div>
                 )}
               </div>
             </>
           ) : (
-            <button className="btn btn-primary btn-sm" onClick={connect}>Connect</button>
+            <Link href="/login" prefetch={false} className="btn btn-primary btn-sm">Log in</Link>
           )}
         </div>
       </div>
@@ -140,7 +135,7 @@ function NotificationsPanel({ onClose }: { onClose: () => void }) {
           >
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
               {actor ? (
-                <Avatar emoji={actor.avatar} color={actor.color} size={22} />
+                <Avatar emoji={actor.avatar} color={actor.color} size={22} src={actor.picture} />
               ) : (
                 <span style={{ width: 22, textAlign: "center" }}>
                   {n.type === "resolved" ? "✅" : n.type === "yield" ? "⚡" : "🎯"}

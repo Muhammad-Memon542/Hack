@@ -18,8 +18,9 @@ export interface User {
   id: string;
   wallet: string;
   username: string;
-  avatar: string; // emoji
+  avatar: string; // emoji (or a single initial when a real identity is applied)
   color: string; // avatar gradient seed
+  picture?: string; // real avatar image URL (e.g. from Auth0), when signed in
   bio: string;
   location: string;
   following: string[]; // user ids
@@ -750,6 +751,9 @@ export function hydrateFromServer(snap: {
     comments.length = 0;
     comments.push(...snap.comments);
   }
+  // Re-apply the signed-in identity overlay after the server snapshot rebuilds
+  // the users array, so a refresh doesn't revert "you" back to the demo user.
+  applyCurrentUserOverride();
 }
 
 // ================= helpers =================
@@ -853,6 +857,50 @@ export const marketsBySubject = (wallet: string) =>
   markets.filter((m) => m.subjectWallet === wallet);
 
 export const CURRENT_USER_ID = "u_you";
+
+// ---------- signed-in identity overlay (Auth0) ----------
+// The demo hard-codes the current user as @satoshi_local. When a real user
+// signs in via Auth0 we patch that same record (keeping its id, so demo
+// positions / follows / score stay attached) to show their name + avatar.
+export interface CurrentUserIdentity {
+  username: string;
+  picture: string | null;
+  bio?: string;
+}
+
+let currentUserOverride: CurrentUserIdentity | null = null;
+
+function applyCurrentUserOverride() {
+  const u = users.find((x) => x.id === CURRENT_USER_ID);
+  if (!u) return;
+  if (currentUserOverride) {
+    const initial =
+      currentUserOverride.username.replace(/[^a-z0-9]/gi, "").charAt(0).toUpperCase() || "U";
+    u.username = currentUserOverride.username;
+    u.picture = currentUserOverride.picture ?? undefined;
+    // With a real photo we show the image; otherwise render an initial.
+    u.avatar = currentUserOverride.picture ? u.avatar : initial;
+    if (currentUserOverride.bio) u.bio = currentUserOverride.bio;
+  } else {
+    // Revert to the demo identity on logout.
+    u.username = "satoshi_local";
+    u.avatar = "🦊";
+    u.picture = undefined;
+  }
+}
+
+/** Overlay (or clear) the current user's display identity from Auth0. */
+export function setCurrentUserIdentity(identity: CurrentUserIdentity | null) {
+  currentUserOverride = identity;
+  applyCurrentUserOverride();
+}
+
+/** Derive a stable @handle from an Auth0 profile (email local-part or name). */
+export function deriveHandle(source: { email?: string | null; name?: string | null }): string {
+  const base = (source.email?.split("@")[0] || source.name || "member").toLowerCase();
+  const clean = base.replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+  return clean || "member";
+}
 
 // ---------- feed scoring ----------
 export type FeedCardType =

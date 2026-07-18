@@ -86,7 +86,7 @@ function UserTable({ pool, cat, meId }: { pool: User[]; cat: Category; meId: str
               <td className={`rank ${i < 3 ? `t${i + 1}` : ""}`}>{i + 1}</td>
               <td>
                 <div className="row">
-                  <Avatar emoji={u.avatar} color={u.color} size={28} />
+                  <Avatar emoji={u.avatar} color={u.color} size={28} src={u.picture} />
                   <UserName username={u.username} />
                   {u.id === meId && <span className="chip">you</span>}
                 </div>

@@ -7,10 +7,12 @@ export function Avatar({
   emoji,
   color,
   size = 34,
+  src,
 }: {
   emoji: string;
   color: string;
   size?: number;
+  src?: string;
 }) {
   return (
     <span
@@ -22,7 +24,18 @@ export function Avatar({
         background: `linear-gradient(135deg, ${color}, ${color}99)`,
       }}
     >
-      {emoji}
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt=""
+          width={size}
+          height={size}
+          style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }}
+        />
+      ) : (
+        emoji
+      )}
     </span>
   );
 }

@@ -33,7 +33,7 @@ export function FeedCard({ item }: { item: FeedItem }) {
   return (
     <div className={`feed-card t-${item.type}`}>
       <div className="feed-line">
-        {actor && <Avatar emoji={actor.avatar} color={actor.color} size={26} />}
+        {actor && <Avatar emoji={actor.avatar} color={actor.color} size={26} src={actor.picture} />}
         <span className="feed-kind">{KIND_LABEL[item.type]}</span>
         <span className="spacer" />
         <span className="faint" style={{ fontSize: "0.78rem" }}>
