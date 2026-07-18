@@ -1,0 +1,4 @@
+# Note: some transitive deps in the 2026 crates.io index require edition2024,
+# which needs cargo >= 1.85 to parse. Verified against 1.97.1.
+[toolchain]
+channel = "stable"

@@ -1,0 +1,21 @@
+# Rust / Anchor
+target/*
+!target/deploy/
+target/deploy/*
+# dev-only program keypair, committed for a reproducible localnet program id
+!target/deploy/*-keypair.json
+.anchor/
+test-ledger/
+
+# Node
+node_modules/
+.next/
+*.tsbuildinfo
+
+# Env — keep .env.example, never commit real secrets
+.env
+.env.local
+.env*.local
+
+# Misc
+.DS_Store
