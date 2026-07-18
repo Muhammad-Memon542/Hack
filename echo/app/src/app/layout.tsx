@@ -4,6 +4,7 @@ import { Providers } from "./providers";
 import { TopNav } from "@/components/TopNav";
 import { CreateMarketModal } from "@/components/CreateMarketModal";
 import { DepositModal } from "@/components/DepositModal";
+import { LiveTicker } from "@/components/LiveTicker";
 
 export const metadata: Metadata = {
   title: "Echo — bet on the people around you",
@@ -20,6 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <main className="shell">{children}</main>
           <CreateMarketModal />
           <DepositModal />
+          <LiveTicker />
         </Providers>
       </body>
     </html>

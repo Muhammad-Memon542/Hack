@@ -17,6 +17,7 @@ const backend = mongoEnabled ? mongoStore : fileStore;
 console.info(`[echo] persistence backend: ${mongoEnabled ? "mongodb" : "file (.data)"}`);
 
 export type { Snapshot, ActivityType, ActivityEvent } from "@/lib/store.file";
+export type { LiveBet, MarketTick } from "@/lib/store.file";
 
 export const getSnapshot = backend.getSnapshot;
 export const placeBet = backend.placeBet;
@@ -24,3 +25,4 @@ export const createMarket = backend.createMarket;
 export const addComment = backend.addComment;
 export const toggleFollow = backend.toggleFollow;
 export const toggleLike = backend.toggleLike;
+export const simulateBets = backend.simulateBets;

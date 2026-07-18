@@ -661,6 +661,125 @@ export const positions: Position[] = [
   { id: "p10", marketId: "m_amir_kickflip", userId: "u_park_ranger", side: "NO", amount: 25, createdAt: hoursAgo(12) },
 ];
 
+// ---------- synthetic "friends" (bots) + live market activity ----------
+// Deterministic generation (seeded PRNG) so the server seed and the client's
+// first render produce identical data — otherwise React hydration breaks. Gives
+// the demo a believable social graph (u_you follows ~650, ~500 follow back) and
+// real bot-driven volume: every market's pools are rebuilt from actual bot
+// stakes, and each stake becomes a feed event so friends look actively engaged.
+(function seedBotsAndActivity() {
+  const minutesAgo = (m: number) => new Date(now - m * 60_000).toISOString();
+  // mulberry32 seeded PRNG — stable output across server + client.
+  let s = 0x9e3779b9;
+  const rnd = () => {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const pick = <T>(arr: T[]): T => arr[Math.floor(rnd() * arr.length)];
+  const int = (lo: number, hi: number) => lo + Math.floor(rnd() * (hi - lo + 1));
+
+  const FIRST = ["maya","diego","priya","noah","zoe","liam","aria","kai","sofia","ethan","luna","mateo","ivy","omar","nina","leo","ruby","finn","tara","jude","mila","rex","cleo","hugo","vera","dev","isla","cyrus","wren","asha","bruno","gigi","theo","suki","marco","elle","dax","nova","remy","juno","cole","fern","axel","sage","enzo","pia","bex","ravi","tess","otis","lux","milo","indie","hank","zane","cora","niko","bella","quinn","hana"];
+  const WORDS = ["trades","bets","local","onchain","degen","forecast","hodl","alpha","edge","sharp","nightly","daily","picks","oracle","vibes"];
+  const AV = ["🦊","🐼","🦉","🐝","🦄","🐳","🦁","🐙","🦋","🐢","🦇","🐧","🦩","🐺","🐨","🦕","🐬","🦔","🐤","🦚","🐊","🦥","🐆","🦓","🐘","🦌","🐕","🐈","🦅","🐡","🍄","🌵","⚡","🔥","🎯","🎲","🚀","🌙","💎","🏆"];
+  const COLORS = ["#f5325b","#a78bfa","#4ade80","#60a5fa","#fbbf24","#f472b6","#22d3ee","#f87171","#34d399","#818cf8","#fb923c","#2dd4bf","#e879f9","#facc15","#38bdf8","#fb7185"];
+  const BIOS = ["Betting on my block.","Local forecaster, mostly right.","Here for the gossip markets.","I fade the crowd.","Small stakes, big opinions.","Chasing the yield.","Neighborhood oracle.","Trust the process.","In it for the memes and the money.","Data > vibes. Usually.","Never met a market I didn't have a take on.","Riverside born and betting.","Long shots only.","I read the comments before I bet.","Certified market degen."];
+  const LOCS = ["Riverside","Downtown","Eastside","Westpark","Northgate","Southbay","Midtown","Old Town"];
+
+  const BOT_N = 650;
+  const FOLLOW_BACK = 500;
+  const you = users.find((u) => u.id === "u_you")!;
+  const usedHandles = new Set(users.map((u) => u.username));
+  const botIds: string[] = [];
+
+  for (let i = 0; i < BOT_N; i++) {
+    let handle = pick(FIRST);
+    const style = int(0, 3);
+    if (style === 1) handle += "_" + pick(WORDS);
+    else if (style === 2) handle += String(int(2, 99));
+    else if (style === 3) handle += "." + pick(FIRST);
+    while (usedHandles.has(handle)) handle += int(0, 9);
+    usedHandles.add(handle);
+    users.push({
+      id: `bot_${i}`,
+      wallet: `Bot${i}${handle}Wa11etEchoDemo00000000000000000000`.slice(0, 44),
+      username: handle,
+      avatar: pick(AV),
+      color: pick(COLORS),
+      bio: pick(BIOS),
+      location: pick(LOCS),
+      following: i < FOLLOW_BACK ? ["u_you"] : [], // 500 follow me back
+      followers: ["u_you"], // I follow every bot
+      followingMarkets: [],
+      followingSubjects: [],
+      echoScore: int(360, 970),
+      accuracy: 0.5 + rnd() * 0.35,
+      totalVolumeBet: 0, // summed from bets below
+      totalVolumeCreated: 0,
+      totalYieldEarned: 0,
+      streakMultiplier: 1 + rnd() * 0.7,
+      privacy: { hidePositions: false, hidePnl: false, ghostMode: false, revealPositionOnComment: true },
+      createdAt: daysAgo(int(4, 300)),
+    });
+    botIds.push(`bot_${i}`);
+  }
+  you.following = [...you.following, ...botIds]; // ~650 following
+  you.followers = [...you.followers, ...botIds.slice(0, FOLLOW_BACK)]; // ~500 followers
+
+  // Rebuild every market's pools from real stakes: zero them, re-add the
+  // hand-seeded positions, then layer on bot bets. Pools/odds/participants are
+  // now a true reflection of who bet what.
+  const amt = () => {
+    const r = rnd();
+    if (r < 0.6) return int(5, 50);
+    if (r < 0.9) return int(50, 200);
+    if (r < 0.99) return int(200, 500);
+    return int(500, 1200);
+  };
+  const bettors: Record<string, Set<string>> = {};
+  for (const m of markets) {
+    m.yesPool = 0;
+    m.noPool = 0;
+    bettors[m.id] = new Set();
+  }
+  for (const p of positions) {
+    const m = markets.find((x) => x.id === p.marketId);
+    if (!m) continue;
+    if (p.side === "YES") m.yesPool += p.amount;
+    else m.noPool += p.amount;
+    bettors[m.id].add(p.userId);
+  }
+  let pb = 0;
+  for (const m of markets) {
+    const n =
+      m.status === "OPEN" ? int(30, 90)
+      : m.status === "RESOLVING" ? int(20, 60)
+      : m.status === "DISPUTED" ? int(30, 80)
+      : int(15, 40);
+    const yesBias = 0.3 + rnd() * 0.45;
+    const settled = m.status === "SETTLED" || m.status === "DISPUTED";
+    for (let k = 0; k < n; k++) {
+      const bot = botIds[int(0, BOT_N - 1)];
+      const side: Side = rnd() < yesBias ? "YES" : "NO";
+      const a = amt();
+      const createdAt = settled
+        ? daysAgo(2 + rnd() * 12)
+        : minutesAgo(1 + Math.floor(rnd() * rnd() * 4320)); // biased recent
+      positions.push({ id: `pb_${pb++}`, marketId: m.id, userId: bot, side, amount: a, createdAt });
+      if (side === "YES") m.yesPool += a;
+      else m.noPool += a;
+      bettors[m.id].add(bot);
+      const bu = users.find((u) => u.id === bot);
+      if (bu) bu.totalVolumeBet += a;
+    }
+    m.participants = bettors[m.id].size;
+  }
+  for (const b of users) {
+    if (b.id.startsWith("bot_") && b.totalVolumeBet === 0) b.totalVolumeBet = int(20, 400);
+  }
+})();
+
 // ---------- comments ----------
 export const comments: Comment[] = [
   { id: "c1", marketId: "m_backflip", userId: "u_park_ranger", parentId: null, content: "He landed it twice at practice on Tuesday. YES all day.", createdAt: hoursAgo(1), tipsReceived: 2.5 },

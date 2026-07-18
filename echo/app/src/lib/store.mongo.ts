@@ -12,7 +12,11 @@ import {
   type Side,
   type ActivityType,
   type ActivityEvent,
+  NOW,
 } from "@/lib/mock";
+
+// Anchor new-activity timestamps to the demo clock (see store.file.ts).
+const liveStamp = () => new Date(NOW - Math.floor(Math.random() * 150) * 1000).toISOString();
 
 /**
  * MongoDB-backed store — the production persistence for Echo's social + market
@@ -35,7 +39,7 @@ export interface Snapshot {
   commentLikes: Record<string, string[]>;
 }
 
-const SEED_VERSION = 3;
+const SEED_VERSION = 4;
 const noId = { projection: { _id: 0 } };
 const genId = (prefix: string) =>
   `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -147,7 +151,7 @@ export async function placeBet(input: {
     userId: input.userId,
     side: input.side,
     amount: input.amount,
-    createdAt: new Date().toISOString(),
+    createdAt: liveStamp(),
   };
   await c.positions.insertOne(withId(position));
 
@@ -190,7 +194,7 @@ export async function createMarket(input: {
     noPool: 0,
     commentCount: 0,
     participants: 0,
-    createdAt: new Date().toISOString(),
+    createdAt: liveStamp(),
     location: user?.location ?? "Riverside",
     tags: [],
     category: input.category ?? "Local",
@@ -221,7 +225,7 @@ export async function addComment(input: {
     userId: input.userId,
     parentId: input.parentId,
     content: input.content.trim(),
-    createdAt: new Date().toISOString(),
+    createdAt: liveStamp(),
     tipsReceived: 0,
   };
   await c.comments.insertOne(withId(comment));
@@ -254,7 +258,7 @@ export async function toggleFollow(input: {
     await c.users.updateOne({ _id: me.id }, { $addToSet: { following: target.id } });
     await c.users.updateOne({ _id: target.id }, { $addToSet: { followers: me.id } });
     await c.activity.insertOne(withId<ActivityEvent>({
-      id: genId("act"), type: "follow", userId: me.id, targetUserId: target.id, createdAt: new Date().toISOString(),
+      id: genId("act"), type: "follow", userId: me.id, targetUserId: target.id, createdAt: liveStamp(),
     }));
   }
   return { ok: true, following: !isFollowing };
@@ -279,4 +283,75 @@ export async function toggleLike(input: {
   }
   const after = await c.likes.findOne({ _id: input.commentId });
   return { ok: true, likes: after?.userIds?.length ?? 0, liked: !liked };
+}
+
+// ---------------- live bot trading engine ----------------
+export interface LiveBet {
+  id: string;
+  marketId: string;
+  marketQuestion: string;
+  userId: string;
+  username: string;
+  avatar: string;
+  color: string;
+  side: Side;
+  amount: number;
+  yesPool: number;
+  noPool: number;
+  createdAt: string;
+}
+export interface MarketTick {
+  id: string;
+  yesPool: number;
+  noPool: number;
+  participants: number;
+}
+
+const weighted = () => {
+  const r = Math.random();
+  if (r < 0.62) return 5 + Math.floor(Math.random() * 45);
+  if (r < 0.9) return 50 + Math.floor(Math.random() * 150);
+  if (r < 0.99) return 200 + Math.floor(Math.random() * 300);
+  return 500 + Math.floor(Math.random() * 700);
+};
+
+export async function simulateBets(
+  n = 3
+): Promise<{ events: LiveBet[]; markets: MarketTick[] }> {
+  await ensureSeeded();
+  const c = await collections();
+  const open = (await c.markets.find({ status: "OPEN" }, noId).toArray()) as Market[];
+  const bots = (await c.users
+    .find({ _id: { $regex: "^bot_" } }, noId)
+    .toArray()) as User[];
+  const events: LiveBet[] = [];
+  const ticks = new Map<string, MarketTick>();
+  if (!open.length || !bots.length) return { events, markets: [] };
+
+  for (let i = 0; i < n; i++) {
+    const m = open[Math.floor(Math.random() * open.length)];
+    const bot = bots[Math.floor(Math.random() * bots.length)];
+    const total = m.yesPool + m.noPool;
+    const yesShare = total > 0 ? m.yesPool / total : 0.5;
+    const momentum = Math.random() < 0.6;
+    const side: Side = (momentum ? Math.random() < yesShare : Math.random() > yesShare) ? "YES" : "NO";
+    const amount = weighted();
+    const createdAt = liveStamp();
+
+    const alreadyIn = !!(await c.positions.findOne({ marketId: m.id, userId: bot.id }));
+    await c.positions.insertOne(withId<Position>({ id: genId("p"), marketId: m.id, userId: bot.id, side, amount, createdAt }));
+    const inc: Record<string, number> = side === "YES" ? { yesPool: amount } : { noPool: amount };
+    if (!alreadyIn) inc.participants = 1;
+    await c.markets.updateOne({ _id: m.id }, { $inc: inc });
+    await c.users.updateOne({ _id: bot.id }, { $inc: { totalVolumeBet: amount } });
+    await c.activity.insertOne(withId<ActivityEvent>({ id: genId("act"), type: "bet", userId: bot.id, marketId: m.id, side, amount, createdAt }));
+
+    // reflect locally for subsequent iterations + response
+    m.yesPool += side === "YES" ? amount : 0;
+    m.noPool += side === "NO" ? amount : 0;
+    if (!alreadyIn) m.participants += 1;
+    events.push({ id: genId("live"), marketId: m.id, marketQuestion: m.question, userId: bot.id, username: bot.username, avatar: bot.avatar, color: bot.color, side, amount, yesPool: m.yesPool, noPool: m.noPool, createdAt });
+    ticks.set(m.id, { id: m.id, yesPool: m.yesPool, noPool: m.noPool, participants: m.participants });
+  }
+  return { events, markets: [...ticks.values()] };
 }

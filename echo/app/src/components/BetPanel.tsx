@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useApp } from "@/app/providers";
 import { estimatedReturn, yesPct, type Market, type Side } from "@/lib/mock";
+import { burstConfetti } from "@/lib/confetti";
 
 export function BetPanel({ market }: { market: Market }) {
   const { connected, connect, placeBet, me, balanceUsdc, setDepositOpen, positions } = useApp();
@@ -128,6 +129,9 @@ export function BetPanel({ market }: { market: Market }) {
             setError(res.error === "insufficient balance" ? "Not enough balance." : res.error ?? "Bet failed");
             return;
           }
+          burstConfetti({
+            colors: side === "YES" ? ["#16a34a", "#4ade80", "#fbbf24"] : ["#ef4444", "#f0728a", "#fbbf24"],
+          });
           setPlaced(`Bet ${amt} USDC on ${side}`);
           setTimeout(() => setPlaced(null), 2200);
         }}

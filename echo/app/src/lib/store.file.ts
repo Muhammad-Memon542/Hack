@@ -13,7 +13,13 @@ import {
   type Side,
   type ActivityType,
   type ActivityEvent,
+  NOW,
 } from "@/lib/mock";
+
+// Live/bot activity timestamps are anchored to the app's demo clock (mock NOW)
+// rather than the wall clock, so relativeTime renders "just now" / "2m" instead
+// of drifting ("in 9h") when the real system time differs from the demo epoch.
+const liveStamp = () => new Date(NOW - Math.floor(Math.random() * 150) * 1000).toISOString();
 
 /**
  * Server-side source of truth for Echo's social + market state.
@@ -42,7 +48,7 @@ interface StoreState {
 }
 
 // Bump to force a reseed after schema/seed changes during development.
-const SEED_VERSION = 3;
+const SEED_VERSION = 4;
 const DATA_DIR = path.join(process.cwd(), ".data");
 const STORE_PATH = path.join(DATA_DIR, "echo.json");
 
@@ -182,7 +188,7 @@ export function placeBet(input: {
       userId: input.userId,
       side: input.side,
       amount: input.amount,
-      createdAt: new Date().toISOString(),
+      createdAt: liveStamp(),
     };
     s.positions.push(position);
 
@@ -232,7 +238,7 @@ export function createMarket(input: {
       noPool: 0,
       commentCount: 0,
       participants: 0,
-      createdAt: new Date().toISOString(),
+      createdAt: liveStamp(),
       location: user?.location ?? "Riverside",
       tags: [],
       category: input.category ?? "Local",
@@ -267,7 +273,7 @@ export function addComment(input: {
       userId: input.userId,
       parentId: input.parentId,
       content: input.content.trim(),
-      createdAt: new Date().toISOString(),
+      createdAt: liveStamp(),
       tipsReceived: 0,
     };
     s.comments.push(comment);
@@ -311,7 +317,7 @@ export function toggleFollow(input: {
         type: "follow",
         userId: me.id,
         targetUserId: target.id,
-        createdAt: new Date().toISOString(),
+        createdAt: liveStamp(),
       });
     }
     return { ok: true, following: !isFollowing };
@@ -329,5 +335,118 @@ export function toggleLike(input: {
       ? list.filter((id) => id !== input.userId)
       : [...list, input.userId];
     return { ok: true, likes: s.commentLikes[input.commentId].length, liked: !liked };
+  });
+}
+
+// ---------------- live bot trading engine ----------------
+
+export interface LiveBet {
+  id: string;
+  marketId: string;
+  marketQuestion: string;
+  userId: string;
+  username: string;
+  avatar: string;
+  color: string;
+  side: Side;
+  amount: number;
+  yesPool: number;
+  noPool: number;
+  createdAt: string;
+}
+
+export interface MarketTick {
+  id: string;
+  yesPool: number;
+  noPool: number;
+  participants: number;
+}
+
+const WEIGHTED = () => {
+  const r = Math.random();
+  if (r < 0.62) return 5 + Math.floor(Math.random() * 45);
+  if (r < 0.9) return 50 + Math.floor(Math.random() * 150);
+  if (r < 0.99) return 200 + Math.floor(Math.random() * 300);
+  return 500 + Math.floor(Math.random() * 700);
+};
+
+/**
+ * Advance the market simulation: place `n` random bot bets on OPEN markets and
+ * return the resulting live bets + the touched markets' new pools. The client
+ * polls this to make markets feel alive — pools shift and a trade tape streams
+ * "@user bet $X YES" in real time. Bots lean slightly with the current odds
+ * (momentum) but stay noisy so books move both ways.
+ */
+export function simulateBets(n = 3): Promise<{ events: LiveBet[]; markets: MarketTick[] }> {
+  return withStore((s) => {
+    const open = s.markets.filter((m) => m.status === "OPEN");
+    const bots = s.users.filter((u) => u.id.startsWith("bot_"));
+    const events: LiveBet[] = [];
+    const touched = new Map<string, MarketTick>();
+    if (open.length === 0 || bots.length === 0) return { events, markets: [] };
+
+    for (let i = 0; i < n; i++) {
+      const m = open[Math.floor(Math.random() * open.length)];
+      const bot = bots[Math.floor(Math.random() * bots.length)];
+      const total = m.yesPool + m.noPool;
+      const yesShare = total > 0 ? m.yesPool / total : 0.5;
+      // 60% momentum (bet with the leading side), else contrarian — keeps it lively.
+      const momentum = Math.random() < 0.6;
+      const side: Side = (momentum ? Math.random() < yesShare : Math.random() > yesShare)
+        ? "YES"
+        : "NO";
+      const amount = WEIGHTED();
+      const createdAt = liveStamp();
+
+      const alreadyIn = s.positions.some((p) => p.marketId === m.id && p.userId === bot.id);
+      s.positions.push({
+        id: genId("p"),
+        marketId: m.id,
+        userId: bot.id,
+        side,
+        amount,
+        createdAt,
+      });
+      if (side === "YES") m.yesPool += amount;
+      else m.noPool += amount;
+      if (!alreadyIn) m.participants += 1;
+      bot.totalVolumeBet += amount;
+
+      s.activity.push({
+        id: genId("act"),
+        type: "bet",
+        userId: bot.id,
+        marketId: m.id,
+        side,
+        amount,
+        createdAt,
+      });
+
+      events.push({
+        id: genId("live"),
+        marketId: m.id,
+        marketQuestion: m.question,
+        userId: bot.id,
+        username: bot.username,
+        avatar: bot.avatar,
+        color: bot.color,
+        side,
+        amount,
+        yesPool: m.yesPool,
+        noPool: m.noPool,
+        createdAt,
+      });
+      touched.set(m.id, {
+        id: m.id,
+        yesPool: m.yesPool,
+        noPool: m.noPool,
+        participants: m.participants,
+      });
+    }
+
+    // Cap activity log growth so the file store stays small over a long demo.
+    if (s.activity.length > 4000) s.activity = s.activity.slice(-3000);
+
+    return { events, markets: [...touched.values()] };
   });
 }

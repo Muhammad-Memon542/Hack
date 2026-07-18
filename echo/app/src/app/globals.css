@@ -629,3 +629,143 @@ input.invalid { border-color: var(--no); }
   object-fit: cover;
   border: 1px solid var(--border-bright);
 }
+
+/* ==========================================================================
+   Live trading — ticker, trade tape, 3D cards, animations
+   ========================================================================== */
+
+/* keep content clear of the fixed ticker */
+body { padding-bottom: 52px; }
+
+.live-badge {
+  display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 800;
+  font-size: 0.72rem; letter-spacing: 0.06em; color: var(--accent);
+}
+.live-badge.sm { font-size: 0.66rem; }
+.live-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 0 0 var(--accent-glow); animation: livePulse 1.4s infinite;
+}
+@keyframes livePulse {
+  0% { box-shadow: 0 0 0 0 rgba(245,50,91,0.5); }
+  70% { box-shadow: 0 0 0 8px rgba(245,50,91,0); }
+  100% { box-shadow: 0 0 0 0 rgba(245,50,91,0); }
+}
+
+/* bottom live ticker */
+.live-ticker {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 55; height: 52px;
+  display: flex; align-items: center; gap: 0.75rem; padding: 0 1rem;
+  background: rgba(255,255,255,0.9); backdrop-filter: blur(16px);
+  border-top: 1px solid var(--border);
+}
+.live-stream {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.5rem;
+  overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 24px, #000 92%, transparent);
+}
+.live-empty { color: var(--text-faint); font-size: 0.85rem; }
+.live-pill {
+  display: inline-flex; align-items: center; gap: 0.4rem; flex-shrink: 0;
+  padding: 0.3rem 0.6rem; border-radius: var(--r-pill); background: var(--card-2);
+  border: 1px solid var(--border); font-size: 0.8rem; white-space: nowrap;
+  animation: pillIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.live-pill:hover { background: var(--card-3); }
+.live-user { font-weight: 700; color: var(--text); }
+.live-side { font-weight: 800; font-size: 0.72rem; }
+.live-side.yes, .trade-side.yes, .trade-amt.yes { color: var(--yes); }
+.live-side.no, .trade-side.no, .trade-amt.no { color: var(--no); }
+.live-amt { font-weight: 800; font-variant-numeric: tabular-nums; }
+@keyframes pillIn { from { opacity: 0; transform: translateX(-18px) scale(0.9); } to { opacity: 1; transform: none; } }
+.live-close, .live-reopen {
+  border: 1px solid var(--border-bright); background: var(--card); color: var(--text-dim);
+  border-radius: 999px; cursor: pointer; flex-shrink: 0;
+}
+.live-close { width: 26px; height: 26px; }
+.live-reopen {
+  position: fixed; bottom: 14px; right: 14px; z-index: 55; padding: 0.5rem 0.8rem;
+  font-weight: 800; font-size: 0.72rem; color: var(--accent); box-shadow: var(--shadow);
+}
+
+/* per-market live trades panel */
+.market-side { display: flex; flex-direction: column; gap: 1rem; }
+.trade-list { display: flex; flex-direction: column; gap: 0.2rem; }
+.trade-row {
+  display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.4rem;
+  border-radius: var(--r-btn); animation: rowIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.trade-row:hover { background: var(--card-2); }
+.trade-main { flex: 1; min-width: 0; }
+.trade-line { font-size: 0.88rem; }
+.trade-side { font-weight: 800; }
+.trade-amt { font-weight: 800; font-variant-numeric: tabular-nums; }
+@keyframes rowIn {
+  from { opacity: 0; transform: translateY(-10px); background: var(--accent-soft); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 3D tilt cards */
+.mcard-3d {
+  transform-style: preserve-3d;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  will-change: transform;
+}
+.mcard-3d.tilting { box-shadow: var(--shadow-lg); }
+/* smooth live odds movement */
+.mcard-bar-fill { transition: width 0.7s cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+/* live odds split bar (market page) */
+.odds-split {
+  height: 12px; border-radius: 999px; overflow: hidden; display: flex;
+  background: var(--no-soft); margin-top: 0.5rem;
+}
+.odds-split > span { display: block; height: 100%; transition: width 0.7s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.odds-split .y { background: linear-gradient(90deg, var(--yes), #4ade80); }
+.odds-split .n { background: linear-gradient(90deg, #f0728a, var(--no)); }
+
+/* number pop when a value updates */
+@keyframes popNum { 0% { transform: scale(1); } 40% { transform: scale(1.12); color: var(--accent); } 100% { transform: scale(1); } }
+
+@media (prefers-color-scheme: dark) {
+  .live-ticker { background: rgba(20,20,28,0.9); }
+}
+
+/* ==========================================================================
+   3D Odds Arena
+   ========================================================================== */
+.arena-panel { overflow: hidden; }
+.arena {
+  position: relative;
+  height: 320px;
+  border-radius: var(--r-card);
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% 0%, #1a1a3e 0%, #12122a 45%, #0a0a18 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -40px 80px -40px rgba(245,50,91,0.25);
+  cursor: grab;
+  touch-action: none;
+}
+.arena-loading {
+  display: flex; align-items: center; justify-content: center; height: 100%;
+  color: #a9b0ff; font-size: 0.9rem; letter-spacing: 0.02em;
+}
+/* HUD — floating YES / NO readouts */
+.arena-hud {
+  position: absolute; inset: 0; pointer-events: none;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 0.9rem 1rem;
+}
+.arena-tag { display: flex; flex-direction: column; line-height: 1; }
+.arena-tag.no { align-items: flex-end; }
+.arena-pct {
+  font-size: 2rem; font-weight: 900; letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums; text-shadow: 0 2px 18px rgba(0,0,0,0.5);
+}
+.arena-tag.yes .arena-pct { color: #2ee27f; text-shadow: 0 0 24px rgba(46,226,127,0.5); }
+.arena-tag.no .arena-pct { color: #ff6b85; text-shadow: 0 0 24px rgba(255,77,109,0.5); }
+.arena-lbl { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.12em; color: rgba(255,255,255,0.7); margin-top: 0.15rem; }
+.arena-pool { font-size: 0.78rem; font-weight: 700; color: rgba(255,255,255,0.5); margin-top: 0.3rem; font-variant-numeric: tabular-nums; }
+.arena-hint {
+  position: absolute; left: 0; right: 0; bottom: 0.6rem; text-align: center;
+  font-size: 0.72rem; color: rgba(255,255,255,0.45); pointer-events: none; letter-spacing: 0.02em;
+}

@@ -16,6 +16,7 @@ import { UserName } from "@/components/UserName";
 import { BetPanel } from "@/components/BetPanel";
 import { Discussion } from "@/components/Discussion";
 import { OddsChart } from "@/components/OddsChart";
+import { LiveTrades } from "@/components/LiveTrades";
 
 export default function MarketDetailPage() {
   const params = useParams<{ id: string }>();
@@ -103,6 +104,10 @@ export default function MarketDetailPage() {
                 <div className="lbl">NO · {market.noPool.toFixed(2)} USDC</div>
               </div>
             </div>
+            <div className="odds-split" aria-hidden>
+              <span className="y" style={{ width: `${yesPct(market)}%` }} />
+              <span className="n" style={{ width: `${100 - yesPct(market)}%` }} />
+            </div>
             <div className="row" style={{ justifyContent: "space-between", marginTop: "0.9rem" }}>
               <span className="dim">Total volume</span>
               <b className="num">{volume(market).toFixed(2)} USDC</b>
@@ -125,8 +130,9 @@ export default function MarketDetailPage() {
           <Discussion market={market} />
         </div>
 
-        <div>
+        <div className="market-side">
           <BetPanel market={market} />
+          <LiveTrades marketId={market.id} />
         </div>
       </div>
     </div>

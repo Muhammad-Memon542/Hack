@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { yesPct, type Market } from "@/lib/mock";
+import { yesPct, volume, type Market } from "@/lib/mock";
 
-// Deterministic PRNG so the initial series matches on server + first client render.
+// Deterministic PRNG so the seeded history matches on server + first client render.
 function mulberry32(seed: number) {
   return () => {
     seed |= 0;
@@ -19,10 +19,10 @@ function hash(s: string) {
   return h >>> 0;
 }
 
-const VIEW_W = 640;
-const VIEW_H = 240;
-const PAD = { l: 8, r: 46, t: 16, b: 24 };
-const N = 34;
+const VIEW_W = 680;
+const VIEW_H = 210;
+const PAD = { l: 10, r: 44, t: 18, b: 22 };
+const N = 40;
 const clamp = (v: number) => Math.max(2, Math.min(98, v));
 
 interface Point {
@@ -30,18 +30,35 @@ interface Point {
   yes: number;
 }
 
+// Catmull-Rom → cubic bezier for a smooth, organic curve.
+function smoothPath(pts: [number, number][]) {
+  if (pts.length < 2) return "";
+  let d = `M ${pts[0][0]},${pts[0][1]}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] ?? p2;
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C ${c1x},${c1y} ${c2x},${c2y} ${p2[0]},${p2[1]}`;
+  }
+  return d;
+}
+
 export function OddsChart({ market }: { market: Market }) {
   const target = yesPct(market);
+  const live = market.status === "OPEN";
 
-  // Seeded history that converges toward the current YES odds.
   const initial = useMemo<Point[]>(() => {
     const rnd = mulberry32(hash(market.id));
     const pts: Point[] = [];
     let v = 50;
     const now = Date.now();
     for (let i = 0; i < N; i++) {
-      const pull = (target - v) * 0.12;
-      v = clamp(v + pull + (rnd() - 0.5) * 8);
+      v = clamp(v + (target - v) * 0.1 + (rnd() - 0.5) * 9);
       pts.push({ t: now - (N - 1 - i) * 60_000, yes: v });
     }
     pts[pts.length - 1].yes = target;
@@ -51,9 +68,8 @@ export function OddsChart({ market }: { market: Market }) {
   const [series, setSeries] = useState<Point[]>(initial);
   const [hover, setHover] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const live = market.status === "OPEN";
 
-  // Keep the latest point synced to the real odds (e.g. after a bet lands).
+  // Track the real odds (updates when bot trades move the market).
   useEffect(() => {
     setSeries((prev) => {
       const next = [...prev];
@@ -62,31 +78,38 @@ export function OddsChart({ market }: { market: Market }) {
     });
   }, [target]);
 
-  // Live random-walk tick for open markets.
+  // Live tick: drift the tail, pulled toward the true current odds.
   useEffect(() => {
     if (!live) return;
     const id = setInterval(() => {
       setSeries((prev) => {
         const last = prev[prev.length - 1].yes;
-        const v = clamp(last + (Math.random() - 0.5) * 5);
-        const next = [...prev.slice(1), { t: Date.now(), yes: v }];
-        return next;
+        const v = clamp(last + (target - last) * 0.25 + (Math.random() - 0.5) * 4);
+        return [...prev.slice(1), { t: Date.now(), yes: v }];
       });
     }, 2000);
     return () => clearInterval(id);
-  }, [live]);
+  }, [live, target]);
 
   const plotW = VIEW_W - PAD.l - PAD.r;
   const plotH = VIEW_H - PAD.t - PAD.b;
   const x = (i: number) => PAD.l + (i / (series.length - 1)) * plotW;
   const y = (v: number) => PAD.t + (1 - v / 100) * plotH;
 
-  const yesLine = series.map((p, i) => `${x(i)},${y(p.yes)}`).join(" ");
-  const noLine = series.map((p, i) => `${x(i)},${y(100 - p.yes)}`).join(" ");
-  const yesArea = `${PAD.l},${y(0)} ${yesLine} ${x(series.length - 1)},${y(0)}`;
+  const pts = series.map((p, i) => [x(i), y(p.yes)] as [number, number]);
+  const line = smoothPath(pts);
+  const area = `${line} L ${x(series.length - 1)},${y(0)} L ${PAD.l},${y(0)} Z`;
 
-  const curYes = Math.round(series[series.length - 1].yes);
-  const curNo = 100 - curYes;
+  const cur = Math.round(series[series.length - 1].yes);
+  const no = 100 - cur;
+  const first = Math.round(series[0].yes);
+  const delta = cur - first;
+  const vals = series.map((p) => p.yes);
+  const hi = Math.round(Math.max(...vals));
+  const lo = Math.round(Math.min(...vals));
+
+  const endX = x(series.length - 1);
+  const endY = y(cur);
 
   const onMove = (e: React.MouseEvent) => {
     const rect = svgRef.current?.getBoundingClientRect();
@@ -99,19 +122,22 @@ export function OddsChart({ market }: { market: Market }) {
   const hp = hover != null ? series[hover] : null;
 
   return (
-    <div className="panel">
-      <div className="between" style={{ marginBottom: "0.6rem" }}>
-        <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          Live odds
+    <div className="panel oddsx">
+      <div className="oddsx-head">
+        <div className="oddsx-title">
+          <h3 style={{ margin: 0 }}>Live odds</h3>
           {live && (
-            <span className="live-pill">
+            <span className="live-badge sm">
               <span className="live-dot" /> LIVE
             </span>
           )}
-        </h3>
-        <div className="row" style={{ gap: "0.9rem" }}>
-          <span style={{ color: "var(--yes)", fontWeight: 800 }}>YES {curYes}%</span>
-          <span style={{ color: "var(--no)", fontWeight: 800 }}>NO {curNo}%</span>
+        </div>
+        <div className="oddsx-big">
+          <span className="oddsx-yes">{cur}%</span>
+          <span className="oddsx-yeslbl">YES</span>
+          <span className={`oddsx-delta ${delta >= 0 ? "up" : "down"}`}>
+            {delta >= 0 ? "▲" : "▼"} {Math.abs(delta)}
+          </span>
         </div>
       </div>
 
@@ -119,43 +145,101 @@ export function OddsChart({ market }: { market: Market }) {
         ref={svgRef}
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         width="100%"
-        style={{ display: "block", overflow: "visible" }}
+        className="oddsx-svg"
         onMouseMove={onMove}
         onMouseLeave={() => setHover(null)}
       >
         <defs>
-          <linearGradient id="yesFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--yes)" stopOpacity="0.22" />
+          <linearGradient id="oxArea" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--yes)" stopOpacity="0.28" />
             <stop offset="100%" stopColor="var(--yes)" stopOpacity="0" />
           </linearGradient>
+          <linearGradient id="oxLine" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#22c55e" />
+            <stop offset="100%" stopColor="#4ade80" />
+          </linearGradient>
+          <filter id="oxGlow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="3.4" result="b" />
+            <feMerge>
+              <feMergeNode in="b" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
         </defs>
 
-        {/* midline at 50% */}
-        <line x1={PAD.l} y1={y(50)} x2={PAD.l + plotW} y2={y(50)} stroke="var(--border-bright)" strokeWidth="1" strokeDasharray="4 4" />
-        <text x={PAD.l + plotW + 6} y={y(50) + 4} fontSize="11" fill="var(--text-faint)">50%</text>
+        {/* gridlines + y labels */}
+        {[0, 25, 50, 75, 100].map((g) => (
+          <g key={g}>
+            <line
+              x1={PAD.l}
+              y1={y(g)}
+              x2={PAD.l + plotW}
+              y2={y(g)}
+              stroke="var(--border)"
+              strokeWidth="1"
+              strokeDasharray={g === 50 ? "5 5" : "0"}
+              opacity={g === 50 ? 0.9 : 0.5}
+            />
+            <text x={PAD.l + plotW + 8} y={y(g) + 4} fontSize="11" fill="var(--text-faint)">
+              {g}
+            </text>
+          </g>
+        ))}
 
-        {/* YES area + lines */}
-        <polygon points={yesArea} fill="url(#yesFill)" />
-        <polyline points={noLine} fill="none" stroke="var(--no)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-        <polyline points={yesLine} fill="none" stroke="var(--yes)" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
+        <path d={area} fill="url(#oxArea)" />
+        <path
+          d={line}
+          fill="none"
+          stroke="url(#oxLine)"
+          strokeWidth="3"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          filter="url(#oxGlow)"
+        />
 
-        {/* end markers + direct labels */}
-        <circle cx={x(series.length - 1)} cy={y(curYes)} r="4.5" fill="var(--yes)" stroke="var(--card)" strokeWidth="2" />
-        <circle cx={x(series.length - 1)} cy={y(curNo)} r="4.5" fill="var(--no)" stroke="var(--card)" strokeWidth="2" />
-
-        {/* hover crosshair */}
+        {/* hover crosshair + tooltip */}
         {hp && hover != null && (
           <g>
             <line x1={x(hover)} y1={PAD.t} x2={x(hover)} y2={PAD.t + plotH} stroke="var(--border-bright)" strokeWidth="1" />
-            <circle cx={x(hover)} cy={y(hp.yes)} r="4" fill="var(--yes)" stroke="var(--card)" strokeWidth="2" />
-            <circle cx={x(hover)} cy={y(100 - hp.yes)} r="4" fill="var(--no)" stroke="var(--card)" strokeWidth="2" />
+            <circle cx={x(hover)} cy={y(hp.yes)} r="4.5" fill="var(--yes)" stroke="var(--card)" strokeWidth="2" />
           </g>
         )}
+
+        {/* live end marker with pulse */}
+        {live && <circle className="oddsx-pulse" cx={endX} cy={endY} r="6" fill="var(--yes)" />}
+        <circle cx={endX} cy={endY} r="4.5" fill="var(--yes)" stroke="var(--card)" strokeWidth="2" />
       </svg>
 
-      <div className="between" style={{ fontSize: "0.75rem", color: "var(--text-faint)", marginTop: "0.2rem" }}>
-        <span>{hp ? relTime(hp.t) : "1h ago"}</span>
-        <span>{hp ? `YES ${Math.round(hp.yes)}% · NO ${Math.round(100 - hp.yes)}%` : "now"}</span>
+      <div className="oddsx-stats">
+        <div className="oddsx-stat">
+          <span className="oddsx-stat-v">${Math.round(volume(market)).toLocaleString()}</span>
+          <span className="oddsx-stat-l">Volume</span>
+        </div>
+        <div className="oddsx-stat">
+          <span className="oddsx-stat-v">{market.participants.toLocaleString()}</span>
+          <span className="oddsx-stat-l">Traders</span>
+        </div>
+        <div className="oddsx-stat">
+          <span className="oddsx-stat-v" style={{ color: "var(--yes)" }}>{hi}%</span>
+          <span className="oddsx-stat-l">Session high</span>
+        </div>
+        <div className="oddsx-stat">
+          <span className="oddsx-stat-v" style={{ color: "var(--no)" }}>{lo}%</span>
+          <span className="oddsx-stat-l">Session low</span>
+        </div>
+        <div className="oddsx-stat oddsx-stat-hint">
+          {hp ? (
+            <>
+              <span className="oddsx-stat-v">{Math.round(hp.yes)}%</span>
+              <span className="oddsx-stat-l">{relTime(hp.t)}</span>
+            </>
+          ) : (
+            <>
+              <span className="oddsx-stat-v" style={{ color: "var(--no)" }}>{no}%</span>
+              <span className="oddsx-stat-l">NO now</span>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -39,6 +39,21 @@ export interface AuthIdentity {
   picture: string | null;
 }
 
+export interface LiveBet {
+  id: string;
+  marketId: string;
+  marketQuestion: string;
+  userId: string;
+  username: string;
+  avatar: string;
+  color: string;
+  side: Side;
+  amount: number;
+  yesPool: number;
+  noPool: number;
+  createdAt: string;
+}
+
 interface AppState {
   connected: boolean;
   connect: () => void;
@@ -66,6 +81,8 @@ interface AppState {
   positions: Position[];
   comments: Comment[];
   activity: ActivityEvent[];
+  /** Rolling stream of live bot trades (newest first) for tapes/tickers. */
+  liveBets: LiveBet[];
   createMarket: (input: CreateMarketInput) => Promise<string | null>;
   placeBet: (marketId: string, side: Side, amount: number) => Promise<MutationResult>;
   addComment: (marketId: string, content: string, parentId: string | null) => Promise<void>;
@@ -126,6 +143,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [commentLikes, setCommentLikes] = useState<Record<string, string[]>>({});
   const [balanceUsdc, setBalanceUsdc] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [liveBets, setLiveBets] = useState<LiveBet[]>([]);
 
   // Client-only personalization slice (persisted to localStorage).
   const [connected, setConnected] = useState(false);
@@ -176,6 +194,52 @@ export function Providers({ children }: { children: React.ReactNode }) {
       setLoading(false);
     }
   }, [applySnapshot]);
+
+  // Live bot-trading engine: poll the simulation, patch market pools locally so
+  // odds animate in real time (no full refetch), and stream trades into the
+  // tape. Pauses when the tab is hidden.
+  useEffect(() => {
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = async () => {
+      if (document.visibilityState === "visible") {
+        try {
+          const n = 1 + Math.floor(Math.random() * 4);
+          const res = await fetch(`/api/live?n=${n}`);
+          if (res.ok && alive) {
+            const data = (await res.json()) as {
+              events: LiveBet[];
+              markets: { id: string; yesPool: number; noPool: number; participants: number }[];
+            };
+            if (data.markets?.length) {
+              setMarkets((prev) => {
+                const byId = new Map(data.markets.map((t) => [t.id, t]));
+                const next = prev.map((m) => {
+                  const t = byId.get(m.id);
+                  return t
+                    ? { ...m, yesPool: t.yesPool, noPool: t.noPool, participants: t.participants }
+                    : m;
+                });
+                hydrateFromServer({ markets: next }); // keep mock helpers in sync
+                return next;
+              });
+            }
+            if (data.events?.length) {
+              setLiveBets((prev) => [...[...data.events].reverse(), ...prev].slice(0, 60));
+            }
+          }
+        } catch {
+          /* ignore transient errors */
+        }
+      }
+      if (alive) timer = setTimeout(tick, 2200 + Math.random() * 1600);
+    };
+    timer = setTimeout(tick, 1500);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, []);
 
   // hydrate persisted personalization slice
   useEffect(() => {
@@ -413,6 +477,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     positions,
     comments,
     activity,
+    liveBets,
     createMarket,
     placeBet,
     addComment,
