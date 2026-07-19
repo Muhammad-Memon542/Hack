@@ -1,6 +1,6 @@
-// Echo — self-contained mock data layer.
+// Better — self-contained mock data layer.
 // Powers the entire app with no database or wallet required. Everything a
-// real Echo would keep off-chain (profiles, comments, follow graph, feeds)
+// real Better would keep off-chain (profiles, comments, follow graph, feeds)
 // lives here so the product renders and behaves end-to-end for review.
 
 export type MarketStatus = "OPEN" | "RESOLVING" | "SETTLED" | "DISPUTED";
@@ -144,7 +144,7 @@ export const subjects: Subject[] = [
     name: "Amir",
     avatar: "🛹",
     color: "#a78bfa",
-    bio: "Skater, meetup regular, occasional backflip attempter. Verified subject on Echo.",
+    bio: "Skater, meetup regular, occasional backflip attempter. Verified subject on Better.",
     verified: true,
     optOut: false,
     totalYieldEarned: 45.2,
@@ -836,7 +836,7 @@ export const notifications: AppNotification[] = [
     id: "n5",
     type: "milestone",
     actorIds: [],
-    text: "You crossed an Echo Score milestone: 612 — Top 20%",
+    text: "You crossed a Better Score milestone: 612 — Top 20%",
     href: "/u/satoshi_local",
     read: true,
     createdAt: daysAgo(2),
@@ -947,7 +947,7 @@ export function estimatedReturn(m: Market, side: Side, amount: number): number {
   return share * total;
 }
 
-// Echo Score = accuracy × ln(volume + 1) × streakMultiplier, scaled.
+// Better Score = accuracy × ln(volume + 1) × streakMultiplier, scaled.
 export function computeEchoScore(u: User): number {
   return Math.round(u.accuracy * Math.log(u.totalVolumeBet + 1) * u.streakMultiplier * 100);
 }

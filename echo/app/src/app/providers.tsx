@@ -111,7 +111,7 @@ interface AppState {
 
 const AppContext = createContext<AppState | null>(null);
 
-const LS_KEY = "echo_app_state_v2";
+const LS_KEY = "better_app_state_v2";
 
 interface Persisted {
   connected: boolean;

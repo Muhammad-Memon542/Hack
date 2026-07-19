@@ -161,7 +161,7 @@ function FriendsLeaderboard({ friends, me }: { friends: User[]; me: User }) {
             <tr>
               <th>#</th>
               <th>Forecaster</th>
-              <th className="right">Echo</th>
+              <th className="right">Better</th>
               <th className="right">
                 {metric === "accuracy" ? "Accuracy" : metric === "volume" ? "Volume" : "PnL"}
               </th>

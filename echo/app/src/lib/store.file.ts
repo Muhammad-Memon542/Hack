@@ -22,12 +22,12 @@ import {
 const liveStamp = () => new Date(NOW - Math.floor(Math.random() * 150) * 1000).toISOString();
 
 /**
- * Server-side source of truth for Echo's social + market state.
+ * Server-side source of truth for Better's social + market state.
  *
  * The UI was originally a static mock; this store makes it real: bets are
  * recorded per account, market pools/volume are recomputed from actual stakes,
  * and every action emits an activity event that powers the social feed. It is
- * file-backed (.data/echo.json, gitignored) and seeded once from the mock data
+ * file-backed (.data/better.json, gitignored) and seeded once from the mock data
  * so the demo starts populated. Swap for Postgres/Prisma to productionize —
  * the shapes mirror the existing schema.
  *
@@ -50,7 +50,7 @@ interface StoreState {
 // Bump to force a reseed after schema/seed changes during development.
 const SEED_VERSION = 4;
 const DATA_DIR = path.join(process.cwd(), ".data");
-const STORE_PATH = path.join(DATA_DIR, "echo.json");
+const STORE_PATH = path.join(DATA_DIR, "better.json");
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
 

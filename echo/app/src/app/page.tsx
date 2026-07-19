@@ -81,6 +81,12 @@ export default function BrowsePage() {
 
   return (
     <div>
+      <section className="hero-banner">
+        <div className="hero-glow" />
+        <h1 className="hero-title">Your takes. Your stakes.</h1>
+        <p className="hero-sub">Predict outcomes, trade on conviction, earn on Solana — 50% of profits go to charity.</p>
+      </section>
+
       <NowTradingStrip />
 
       <SearchBar query={query} setQuery={(v) => { setQuery(v); setPage(0); }} />

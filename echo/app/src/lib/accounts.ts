@@ -1,6 +1,6 @@
 /**
- * Borsh decoders for on-chain echo_protocol accounts.
- * Field order mirrors programs/echo_protocol/src/state.rs — keep in sync.
+ * Borsh decoders for on-chain better_protocol accounts.
+ * Field order mirrors programs/better_protocol/src/state.rs — keep in sync.
  */
 import { PublicKey } from "@solana/web3.js";
 

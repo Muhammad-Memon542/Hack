@@ -26,12 +26,12 @@ export function LoginPanel({ configured }: { configured: boolean }) {
       <div className="auth-card">
         <div className="auth-brand">
           <PinIcon size={30} />
-          <span>echo</span>
+          <span>Better</span>
         </div>
-        <h1 className="auth-title">Bet on the people around you</h1>
+        <h1 className="auth-title">Your takes. Your stakes.</h1>
         <p className="auth-sub">
-          Log in to create markets, place bets, and route yield back to the people your
-          predictions are about.
+          A better way to bet. 50% of winning profits go to charity, and every transaction
+          offsets its carbon footprint. Predict, trade, and make a difference — all on Solana.
         </p>
 
         {!configured ? (
@@ -70,7 +70,7 @@ export function LoginPanel({ configured }: { configured: boolean }) {
               </div>
             </div>
             <button className="btn btn-primary btn-lg" onClick={() => router.push("/")}>
-              Continue to Echo
+              Continue to Better
             </button>
             <a className="btn btn-ghost btn-lg" href="/auth/logout">
               Log out

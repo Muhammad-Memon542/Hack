@@ -17,7 +17,7 @@ interface DepositAddress {
  * it calls our /api/deposits routes, which provision a deposit address and
  * reconcile settled deposits into the balance. The payer can send USDC from any
  * supported chain; Unifold bridges it to the treasury and our webhook credits
- * the Echo balance.
+ * the Better balance.
  */
 export function DepositModal() {
   const { depositOpen, setDepositOpen, balanceUsdc, refreshState } = useApp();
@@ -131,7 +131,7 @@ export function DepositModal() {
               </div>
               <div className="hint">
                 Send test USDC on Base Sepolia to this address. Unifold detects the transfer,
-                bridges it to the treasury, and credits your Echo balance automatically. Send from
+                bridges it to the treasury, and credits your Better balance automatically. Send from
                 any supported chain — Unifold routes it.
               </div>
             </div>

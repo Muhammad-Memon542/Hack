@@ -14,7 +14,7 @@ const backend = mongoEnabled ? mongoStore : fileStore;
 
 // Announce the active backend once, so it's obvious in the server logs which
 // persistence layer is live (helps confirm the Mongo switch took effect).
-console.info(`[echo] persistence backend: ${mongoEnabled ? "mongodb" : "file (.data)"}`);
+console.info(`[better] persistence backend: ${mongoEnabled ? "mongodb" : "file (.data)"}`);
 
 export type { Snapshot, ActivityType, ActivityEvent } from "@/lib/store.file";
 export type { LiveBet, MarketTick } from "@/lib/store.file";

@@ -82,7 +82,7 @@ export function UserName({ username, className }: { username: string; className?
           <div className="hc-stats">
             <div className="hc-stat">
               <div className="v escore">{user.echoScore}</div>
-              <div className="l">Echo · {echoPercentile(user.echoScore)}</div>
+              <div className="l">Better · {echoPercentile(user.echoScore)}</div>
             </div>
             <div className="hc-stat">
               <div className="v">{Math.round(user.accuracy * 100)}%</div>

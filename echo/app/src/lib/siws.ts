@@ -15,7 +15,7 @@ export function buildSiwsMessage({ domain, address, nonce, issuedAt }: SiwsField
     `${domain} wants you to sign in with your Solana account:`,
     address,
     "",
-    "By signing you authenticate to Echo. This does not trigger a transaction.",
+    "By signing you authenticate to Better. This does not trigger a transaction.",
     "",
     `Nonce: ${nonce}`,
     `Issued At: ${issuedAt}`,

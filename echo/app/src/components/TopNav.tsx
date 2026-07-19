@@ -37,7 +37,7 @@ export function TopNav() {
       <div className="nav-inner">
         <Link href="/" className="logo">
           <PinIcon size={22} />
-          echo
+          <span>Better</span>
         </Link>
 
         <div className="nav-right" ref={wrapRef}>
@@ -74,7 +74,7 @@ export function TopNav() {
                     <div className="menu-head">
                       <div style={{ fontWeight: 800 }}>{authUser ? authUser.name : `@${me.username}`}</div>
                       <div className="faint" style={{ fontSize: "0.8rem" }}>
-                        {authUser?.email ?? `Echo Score ${me.echoScore}`}
+                        {authUser?.email ?? `Better Score ${me.echoScore}`}
                       </div>
                     </div>
                     <div className="menu-sep" />

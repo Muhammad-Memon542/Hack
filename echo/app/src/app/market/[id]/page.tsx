@@ -163,7 +163,7 @@ function OnChainStatus({ market, indexing }: { market: Market; indexing: boolean
     <div className="panel">
       <h3>On-chain status</h3>
       <div className="info-box">
-        ✓ Settled on Solana. Pools and payouts are enforced by the Echo program.{" "}
+        ✓ Settled on Solana. Pools and payouts are enforced by the Better program.{" "}
         <a
           href="https://explorer.solana.com/?cluster=devnet"
           target="_blank"

@@ -1,9 +1,16 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useApp } from "@/app/providers";
 import { useRouter } from "next/navigation";
-import { CURRENT_USER_ID, type Market, type Side } from "@/lib/mock";
+import {
+  CURRENT_USER_ID,
+  type Market,
+  type Side,
+  relativeTime,
+  yesPct,
+  volume,
+} from "@/lib/mock";
 
 // ══════════════════════════════════════════════════════════════════════
 // LMSR Engine
@@ -11,169 +18,286 @@ import { CURRENT_USER_ID, type Market, type Side } from "@/lib/mock";
 const LMSR = {
   cost(b: number, qYes: number, qNo: number): number {
     const maxQ = Math.max(qYes, qNo);
-    return b * (maxQ + Math.log(Math.exp((qYes - maxQ) / 1) + Math.exp((qNo - maxQ) / 1)));
+    return (
+      b *
+      (maxQ +
+        Math.log(
+          Math.exp((qYes - maxQ) / 1) + Math.exp((qNo - maxQ) / 1)
+        ))
+    );
   },
-  price(b: number, qYes: number, qNo: number, side: "YES" | "NO"): number {
+  price(
+    b: number,
+    qYes: number,
+    qNo: number,
+    side: "YES" | "NO"
+  ): number {
     const expY = Math.exp(qYes / b);
     const expN = Math.exp(qNo / b);
     return side === "YES" ? expY / (expY + expN) : expN / (expY + expN);
   },
-  costForShares(b: number, qYes: number, qNo: number, side: "YES" | "NO", shares: number): number {
+  costForShares(
+    b: number,
+    qYes: number,
+    qNo: number,
+    side: "YES" | "NO",
+    shares: number
+  ): number {
     const c0 = LMSR.cost(b, qYes, qNo);
     const newYes = side === "YES" ? qYes + shares : qYes;
     const newNo = side === "NO" ? qNo + shares : qNo;
     return LMSR.cost(b, newYes, newNo) - c0;
   },
-  sharesToBuy(b: number, qYes: number, qNo: number, side: "YES" | "NO", spend: number): number {
-    let lo = 0, hi = spend / 0.001;
+  sharesToBuy(
+    b: number,
+    qYes: number,
+    qNo: number,
+    side: "YES" | "NO",
+    spend: number
+  ): number {
+    let lo = 0,
+      hi = spend / 0.001;
     for (let i = 0; i < 80; i++) {
       const mid = (lo + hi) / 2;
       const cost = LMSR.costForShares(b, qYes, qNo, side, mid);
-      if (cost < spend) lo = mid; else hi = mid;
+      if (cost < spend) lo = mid;
+      else hi = mid;
     }
     return lo;
   },
-  depthLadder(b: number, qYes: number, qNo: number, levels: number = 5): { size: number; bidYes: number; askYes: number; bidNo: number; askNo: number }[] {
-    const ladder: { size: number; bidYes: number; askYes: number; bidNo: number; askNo: number }[] = [];
-    // Use $ spend amounts as "size" and show effective price per contract
-    const spendLevels = [5, 10, 25, 50, 100];
-    for (let i = 0; i < Math.min(levels, spendLevels.length); i++) {
-      const spend = spendLevels[i];
-      const sharesYes = LMSR.sharesToBuy(b, qYes, qNo, "YES", spend);
-      const sharesNo = LMSR.sharesToBuy(b, qYes, qNo, "NO", spend);
-      const pYes = LMSR.price(b, qYes, qNo, "YES");
-      const pNo = LMSR.price(b, qYes, qNo, "NO");
-      // After buying: new price is the effective ask
-      const newYesY = qYes + sharesYes, newNoY = qNo;
-      const newYesN = qYes, newNoN = qNo + sharesNo;
-      const askYes = LMSR.price(b, newYesY, newNoY, "YES");
-      const askNo = LMSR.price(b, newYesN, newNoN, "NO");
-      ladder.push({
-        size: spend,
-        bidYes: pYes,
-        askYes,
-        bidNo: pNo,
-        askNo,
-      });
+};
+
+// ══════════════════════════════════════════════════════════════════════
+// Probability Ring SVG
+// ══════════════════════════════════════════════════════════════════════
+function ProbRing({
+  yes,
+  size = 180,
+  label,
+}: {
+  yes: number;
+  size?: number;
+  label?: string;
+}) {
+  const r = (size - 16) / 2;
+  const circ = 2 * Math.PI * r;
+  const yesLen = circ * (yes / 100);
+  const noLen = circ - yesLen;
+  const cx = size / 2;
+  const cy = size / 2;
+
+  return (
+    <div className="prob-ring-wrap">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <defs>
+          <linearGradient id="yesGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#14F195" />
+            <stop offset="100%" stopColor="#9945FF" />
+          </linearGradient>
+          <linearGradient id="noGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#ff6b85" />
+            <stop offset="100%" stopColor="#ff3355" />
+          </linearGradient>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+            <feMerge>
+              <feMergeNode in="coloredBlur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        <circle
+          cx={cx}
+          cy={cy}
+          r={r}
+          fill="none"
+          stroke="rgba(255,255,255,0.06)"
+          strokeWidth="10"
+        />
+        <circle
+          cx={cx}
+          cy={cy}
+          r={r}
+          fill="none"
+          stroke="url(#noGrad)"
+          strokeWidth="10"
+          strokeDasharray={`${noLen} ${yesLen}`}
+          strokeDashoffset={0}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${cx} ${cy})`}
+          style={{ transition: "stroke-dasharray 0.8s cubic-bezier(0.22,1,0.36,1)" }}
+        />
+        <circle
+          cx={cx}
+          cy={cy}
+          r={r}
+          fill="none"
+          stroke="url(#yesGrad)"
+          strokeWidth="10"
+          strokeDasharray={`${yesLen} ${noLen}`}
+          strokeDashoffset={-noLen}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${cx} ${cy})`}
+          filter="url(#glow)"
+          style={{ transition: "stroke-dasharray 0.8s cubic-bezier(0.22,1,0.36,1)" }}
+        />
+        <text
+          x={cx}
+          y={cy - 8}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill="#fff"
+          fontSize="36"
+          fontWeight="900"
+          style={{ fontVariantNumeric: "tabular-nums", letterSpacing: "-0.03em" }}
+        >
+          {yes.toFixed(1)}%
+        </text>
+        <text
+          x={cx}
+          y={cy + 22}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill="rgba(255,255,255,0.5)"
+          fontSize="11"
+          fontWeight="700"
+          letterSpacing="0.08em"
+        >
+          {label ?? "YES PROBABILITY"}
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Solana TX Simulator animation
+// ══════════════════════════════════════════════════════════════════════
+function SolanaSimulator({
+  active,
+  side,
+  amount,
+  onDone,
+}: {
+  active: boolean;
+  side: Side;
+  amount: number;
+  onDone: () => void;
+}) {
+  const [step, setStep] = useState(0);
+  const steps = [
+    "Building transaction...",
+    "Deriving PDAs...",
+    "Serializing Borsh args...",
+    "Signing with wallet...",
+    `Sending to Solana devnet...`,
+    "Awaiting confirmation...",
+    "Confirmed! 1 block.",
+  ];
+
+  useEffect(() => {
+    if (!active) {
+      setStep(0);
+      return;
     }
-    return ladder;
-  },
-};
+    let i = 0;
+    const timer = setInterval(() => {
+      i++;
+      if (i >= steps.length) {
+        clearInterval(timer);
+        setTimeout(onDone, 600);
+        setStep(steps.length - 1);
+      } else {
+        setStep(i);
+      }
+    }, 400);
+    return () => clearInterval(timer);
+  }, [active]);
 
-// ══════════════════════════════════════════════════════════════════════
-// Black-Scholes for binary options on shares priced [0, 1]
-// ══════════════════════════════════════════════════════════════════════
-function normCDF(x: number): number {
-  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741, a4 = -1.453152027, a5 = 1.061405429;
-  const p = 0.3275911;
-  const sign = x < 0 ? -1 : 1;
-  x = Math.abs(x) / Math.SQRT2;
-  const t = 1 / (1 + p * x);
-  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
-  return 0.5 * (1 + sign * y);
+  if (!active) return null;
+
+  return (
+    <div className="sol-sim">
+      <div className="sol-sim-header">
+        <svg width="20" height="20" viewBox="0 0 28 28" fill="none">
+          <circle cx="14" cy="14" r="14" fill="url(#solGrad2)" />
+          <defs>
+            <linearGradient id="solGrad2" x1="0" y1="0" x2="28" y2="28">
+              <stop offset="0%" stopColor="#14F195" />
+              <stop offset="100%" stopColor="#9945FF" />
+            </linearGradient>
+          </defs>
+          <path d="M8 17.5h8.5l3.5-3H11.5L8 17.5z" fill="#fff" />
+          <path d="M8 10.5h8.5l3.5 3H11.5L8 10.5z" fill="#fff" />
+          <path d="M8 14h12" stroke="#fff" strokeWidth="1.5" />
+        </svg>
+        <span>Solana Transaction</span>
+      </div>
+      <div className="sol-sim-steps">
+        {steps.map((s, i) => (
+          <div
+            key={i}
+            className={`sol-sim-step ${i < step ? "done" : i === step ? "active" : ""}`}
+          >
+            <div className="sol-sim-dot">
+              {i < step ? (
+                <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#14F195" strokeWidth="2" fill="none" strokeLinecap="round"/></svg>
+              ) : i === step ? (
+                <div className="sol-sim-spinner" />
+              ) : (
+                <div className="sol-sim-empty" />
+              )}
+            </div>
+            <span>{s}</span>
+          </div>
+        ))}
+      </div>
+      {step >= steps.length - 1 && (
+        <div className="sol-sim-sig">
+          <span className="sol-sim-sig-label">Signature</span>
+          <span className="sol-sim-sig-val mono">
+            {Array.from({ length: 44 }, () =>
+              "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz123456789"[
+                Math.floor(Math.random() * 58)
+              ]
+            ).join("")}
+          </span>
+        </div>
+      )}
+    </div>
+  );
 }
-
-function normPDF(x: number): number {
-  return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
-}
-
-interface Greeks { delta: number; gamma: number; theta: number; vega: number; rho: number; price: number }
-
-function blackScholes(S: number, K: number, T: number, r: number, sigma: number, isCall: boolean): Greeks {
-  if (T <= 0.0001) {
-    const intrinsic = isCall ? Math.max(0, S - K) : Math.max(0, K - S);
-    return { delta: isCall ? (S > K ? 1 : 0) : (S < K ? -1 : 0), gamma: 0, theta: 0, vega: 0, rho: 0, price: intrinsic };
-  }
-  const d1 = (Math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * Math.sqrt(T));
-  const d2 = d1 - sigma * Math.sqrt(T);
-  const nd1 = normCDF(d1), nd2 = normCDF(d2), nnd1 = normCDF(-d1), nnd2 = normCDF(-d2);
-  const pdf1 = normPDF(d1);
-  const disc = Math.exp(-r * T);
-
-  if (isCall) {
-    return {
-      price: S * nd1 - K * disc * nd2,
-      delta: nd1,
-      gamma: pdf1 / (S * sigma * Math.sqrt(T)),
-      theta: -(S * pdf1 * sigma) / (2 * Math.sqrt(T)) - r * K * disc * nd2,
-      vega: S * pdf1 * Math.sqrt(T),
-      rho: K * T * disc * nd2,
-    };
-  }
-  return {
-    price: K * disc * nnd2 - S * nnd1,
-    delta: -nnd1,
-    gamma: pdf1 / (S * sigma * Math.sqrt(T)),
-    theta: -(S * pdf1 * sigma) / (2 * Math.sqrt(T)) + r * K * disc * nnd2,
-    vega: S * pdf1 * Math.sqrt(T),
-    rho: -K * T * disc * nnd2,
-  };
-}
-
-// ── Leg & Strategy types ──
-interface OptionLeg {
-  id: string;
-  type: "call" | "put";
-  strike: number;
-  qty: number; // +buy, -sell
-  premium: number;
-  greeks: Greeks;
-}
-
-type StrategyPreset = "custom" | "bull_spread" | "bear_spread" | "straddle" | "strangle";
-
-const STRATEGY_PRESETS: Record<StrategyPreset, { label: string; build: (S: number) => Omit<OptionLeg, "id" | "premium" | "greeks">[] }> = {
-  custom: { label: "Custom", build: () => [] },
-  bull_spread: {
-    label: "Bull Call Spread",
-    build: (S) => [
-      { type: "call", strike: Math.max(0.05, S - 0.1), qty: 1 },
-      { type: "call", strike: Math.min(0.95, S + 0.1), qty: -1 },
-    ],
-  },
-  bear_spread: {
-    label: "Bear Put Spread",
-    build: (S) => [
-      { type: "put", strike: Math.min(0.95, S + 0.1), qty: 1 },
-      { type: "put", strike: Math.max(0.05, S - 0.1), qty: -1 },
-    ],
-  },
-  straddle: {
-    label: "Straddle",
-    build: (S) => [
-      { type: "call", strike: S, qty: 1 },
-      { type: "put", strike: S, qty: 1 },
-    ],
-  },
-  strangle: {
-    label: "Strangle",
-    build: (S) => [
-      { type: "call", strike: Math.min(0.95, S + 0.15), qty: 1 },
-      { type: "put", strike: Math.max(0.05, S - 0.15), qty: 1 },
-    ],
-  },
-};
-
-const uid = () => Math.random().toString(36).slice(2, 8);
 
 // ══════════════════════════════════════════════════════════════════════
 // Component
 // ══════════════════════════════════════════════════════════════════════
 export default function TradePage() {
   const router = useRouter();
-  const { connected, markets, positions, balanceUsdc } = useApp();
+  const {
+    connected,
+    markets,
+    positions,
+    balanceUsdc,
+    placeBet,
+    liveBets,
+  } = useApp();
 
-  const openMarkets = useMemo(() => markets.filter(m => m.status === "OPEN"), [markets]);
+  const openMarkets = useMemo(
+    () => markets.filter((m) => m.status === "OPEN"),
+    [markets]
+  );
   const [selectedMarketId, setSelectedMarketId] = useState<string>("");
-  const selectedMarket = useMemo(() => openMarkets.find(m => m.id === selectedMarketId) ?? openMarkets[0], [openMarkets, selectedMarketId]);
+  const selectedMarket = useMemo(
+    () =>
+      openMarkets.find((m) => m.id === selectedMarketId) ?? openMarkets[0],
+    [openMarkets, selectedMarketId]
+  );
 
   useEffect(() => {
-    if (!selectedMarketId && openMarkets.length > 0) setSelectedMarketId(openMarkets[0].id);
+    if (!selectedMarketId && openMarkets.length > 0)
+      setSelectedMarketId(openMarkets[0].id);
   }, [openMarkets, selectedMarketId]);
 
-  // LMSR state: normalize market pools to reasonable share quantities.
-  // Raw pools are dollar amounts (e.g. $39k); we scale them down so the
-  // LMSR math produces sensible per-dollar quotes.
   const { b, qYes, qNo } = useMemo(() => {
     if (!selectedMarket) return { b: 100, qYes: 50, qNo: 50 };
     const total = selectedMarket.yesPool + selectedMarket.noPool || 1;
@@ -184,148 +308,226 @@ export default function TradePage() {
     return { b: liq, qYes: qY, qNo: qN };
   }, [selectedMarket]);
 
-  // Order ticket
-  const [action, setAction] = useState<"buy" | "sell">("buy");
+  // Order state
   const [side, setSide] = useState<Side>("YES");
   const [spendStr, setSpendStr] = useState("10");
   const [slippage, setSlippage] = useState(2);
+  const [simulating, setSimulating] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [betError, setBetError] = useState<string | null>(null);
+  const [activeStrategy, setActiveStrategy] = useState<string | null>(null);
+  const [tradeTab, setTradeTab] = useState<"strategies" | "custom">("strategies");
   const spend = parseFloat(spendStr) || 0;
 
-  // Quote — shares are displayed as "contracts" (1 contract pays $1 if correct).
-  // Internally the LMSR works in normalized units; we convert for display.
+  const QUICK_AMOUNTS = [5, 10, 25, 50, 100];
+
+  // ── Strategy definitions ──
+  type Strategy = {
+    id: string;
+    name: string;
+    icon: string;
+    desc: string;
+    detail: string;
+    apply: (pctYes: number, bal: number) => { side: Side; amount: number; slippage: number };
+    tag: string;
+  };
+
+  const strategies: Strategy[] = useMemo(() => [
+    {
+      id: "value",
+      name: "Value Bet",
+      icon: "💎",
+      desc: "Bet on the underdog when odds look mispriced",
+      detail: "Picks the less-likely side and invests 10% of your balance. Best when you think the crowd is wrong.",
+      tag: "Beginner",
+      apply: (pY: number, bal: number) => ({
+        side: pY > 50 ? "NO" as Side : "YES" as Side,
+        amount: Math.max(5, Math.floor(bal * 0.1)),
+        slippage: 2,
+      }),
+    },
+    {
+      id: "momentum",
+      name: "Ride the Wave",
+      icon: "🌊",
+      desc: "Follow the crowd — bet with the majority",
+      detail: "Backs the leading side with a moderate 8% of balance. Good for markets with strong consensus.",
+      tag: "Popular",
+      apply: (pY: number, bal: number) => ({
+        side: pY >= 50 ? "YES" as Side : "NO" as Side,
+        amount: Math.max(5, Math.floor(bal * 0.08)),
+        slippage: 1,
+      }),
+    },
+    {
+      id: "safe",
+      name: "Safe Play",
+      icon: "🛡️",
+      desc: "Small bet, low risk — great for beginners",
+      detail: "A conservative $5 bet on the leading side with tight 0.5% slippage. Perfect for learning the ropes.",
+      tag: "Low Risk",
+      apply: (pY: number) => ({
+        side: pY >= 50 ? "YES" as Side : "NO" as Side,
+        amount: 5,
+        slippage: 0.5,
+      }),
+    },
+    {
+      id: "contrarian",
+      name: "Contrarian",
+      icon: "🔄",
+      desc: "Bet against extreme odds for big upside",
+      detail: "When one side is above 70%, this bets against it for a higher potential payout. High risk, high reward.",
+      tag: "Advanced",
+      apply: (pY: number, bal: number) => ({
+        side: pY > 50 ? "NO" as Side : "YES" as Side,
+        amount: Math.max(5, Math.floor(bal * 0.05)),
+        slippage: 5,
+      }),
+    },
+    {
+      id: "conviction",
+      name: "Max Conviction",
+      icon: "🔥",
+      desc: "Go all-in on your strongest pick",
+      detail: "Uses 25% of your balance on whichever side you feel strongest about. For markets you've researched deeply.",
+      tag: "High Risk",
+      apply: (pY: number, bal: number) => ({
+        side: pY >= 50 ? "YES" as Side : "NO" as Side,
+        amount: Math.max(10, Math.floor(bal * 0.25)),
+        slippage: 5,
+      }),
+    },
+    {
+      id: "scalp",
+      name: "Quick Scalp",
+      icon: "⚡",
+      desc: "Tiny fast trade to profit from small moves",
+      detail: "A $5 trade on the stronger side with minimal slippage. Get in, ride a small move, get out.",
+      tag: "Fast",
+      apply: (pY: number) => ({
+        side: pY >= 50 ? "YES" as Side : "NO" as Side,
+        amount: 5,
+        slippage: 0.5,
+      }),
+    },
+  ], []);
+
+  const applyStrategy = useCallback((strat: Strategy) => {
+    if (!selectedMarket) return;
+    const pY = LMSR.price(b, qYes, qNo, "YES") * 100;
+    const result = strat.apply(pY, balanceUsdc);
+    setSide(result.side);
+    setSpendStr(String(Math.min(result.amount, Math.floor(balanceUsdc))));
+    setSlippage(result.slippage);
+    setActiveStrategy(strat.id);
+    setTradeTab("custom");
+  }, [selectedMarket, b, qYes, qNo, balanceUsdc]);
+
   const quote = useMemo(() => {
     if (spend <= 0 || !selectedMarket) return null;
     const spotBefore = LMSR.price(b, qYes, qNo, side);
     const rawShares = LMSR.sharesToBuy(b, qYes, qNo, side, spend);
     if (rawShares <= 0) return null;
-    // Display shares as contracts: spend / spot ≈ number of $1-payout contracts
     const contracts = spend / spotBefore;
-    const avgPrice = spotBefore; // cents per contract at entry
+    const avgPrice = spotBefore;
     const newYes = side === "YES" ? qYes + rawShares : qYes;
     const newNo = side === "NO" ? qNo + rawShares : qNo;
     const spotAfter = LMSR.price(b, newYes, newNo, side);
-    const impact = Math.abs(spotAfter - spotBefore) / spotBefore * 100;
+    const impact =
+      (Math.abs(spotAfter - spotBefore) / spotBefore) * 100;
     const newProbYes = LMSR.price(b, newYes, newNo, "YES") * 100;
     const lpFee = spend * 0.003;
+    const potentialPayout = contracts * 1; // $1 per contract if correct
+    const potentialProfit = potentialPayout - spend;
+    const charityDonation = potentialProfit > 0 ? potentialProfit * 0.5 : 0;
+    const yourProfit = potentialProfit > 0 ? potentialProfit * 0.5 : potentialProfit;
     const minContracts = contracts * (1 - slippage / 100);
-    return { shares: contracts, avgPrice, spotBefore, spotAfter, impact, newProbYes, lpFee, minShares: minContracts };
+    return {
+      shares: contracts,
+      avgPrice,
+      spotBefore,
+      spotAfter,
+      impact,
+      newProbYes,
+      lpFee,
+      minShares: minContracts,
+      potentialPayout,
+      potentialProfit,
+      charityDonation,
+      yourProfit,
+    };
   }, [spend, b, qYes, qNo, side, slippage, selectedMarket]);
-
-  // Depth ladder
-  const ladder = useMemo(() => LMSR.depthLadder(b, qYes, qNo), [b, qYes, qNo]);
 
   // Position panel
   const myPositions = useMemo(
-    () => positions.filter(p => p.userId === CURRENT_USER_ID && markets.some(m => m.id === p.marketId && m.status !== "SETTLED")),
+    () =>
+      positions.filter(
+        (p) =>
+          p.userId === CURRENT_USER_ID &&
+          markets.some((m) => m.id === p.marketId && m.status !== "SETTLED")
+      ),
     [positions, markets]
   );
 
-  // Options desk
-  const [showOptions, setShowOptions] = useState(false);
-  const [impliedVol, setImpliedVol] = useState(80);
-  const [legs, setLegs] = useState<OptionLeg[]>([]);
-  const [stratPreset, setStratPreset] = useState<StrategyPreset>("custom");
+  // Live market trades
+  const marketTrades = useMemo(
+    () =>
+      selectedMarket
+        ? liveBets
+            .filter((lb) => lb.marketId === selectedMarket.id)
+            .slice(0, 8)
+        : [],
+    [liveBets, selectedMarket]
+  );
 
-  const underlying = selectedMarket ? LMSR.price(b, qYes, qNo, "YES") : 0.5;
-  const T = selectedMarket ? Math.max(0.01, (new Date(selectedMarket.closesAt).getTime() - Date.now()) / (365.25 * 86400_000)) : 0.1;
-  const sigma = impliedVol / 100;
-  const r = 0.05;
+  const handleTrade = useCallback(async () => {
+    if (!selectedMarket || spend <= 0 || spend > balanceUsdc) return;
+    setBetError(null);
+    setSimulating(true);
+  }, [selectedMarket, spend, balanceUsdc]);
 
-  const applyPreset = useCallback((preset: StrategyPreset) => {
-    setStratPreset(preset);
-    if (preset === "custom") return;
-    const defs = STRATEGY_PRESETS[preset].build(underlying);
-    const newLegs = defs.map(d => {
-      const g = blackScholes(underlying, d.strike, T, r, sigma, d.type === "call");
-      return { id: uid(), ...d, premium: g.price * Math.abs(d.qty), greeks: g };
-    });
-    setLegs(newLegs);
-  }, [underlying, T, sigma]);
-
-  const addLeg = useCallback((type: "call" | "put") => {
-    const strike = Math.round(underlying * 20) / 20;
-    const g = blackScholes(underlying, strike, T, r, sigma, type === "call");
-    setLegs(prev => [...prev, { id: uid(), type, strike, qty: 1, premium: g.price, greeks: g }]);
-    setStratPreset("custom");
-  }, [underlying, T, sigma]);
-
-  const updateLeg = useCallback((id: string, patch: Partial<OptionLeg>) => {
-    setLegs(prev => prev.map(l => {
-      if (l.id !== id) return l;
-      const updated = { ...l, ...patch };
-      const g = blackScholes(underlying, updated.strike, T, r, sigma, updated.type === "call");
-      return { ...updated, premium: g.price * Math.abs(updated.qty), greeks: g };
-    }));
-    setStratPreset("custom");
-  }, [underlying, T, sigma]);
-
-  const removeLeg = useCallback((id: string) => {
-    setLegs(prev => prev.filter(l => l.id !== id));
-    setStratPreset("custom");
-  }, []);
-
-  // Payoff computation for SVG
-  const payoffData = useMemo(() => {
-    if (legs.length === 0) return null;
-    const points: { x: number; y: number }[] = [];
-    const netPremium = legs.reduce((s, l) => s + (l.qty > 0 ? -l.premium : l.premium), 0);
-    let maxProfit = -Infinity, maxLoss = Infinity;
-    const breakevens: number[] = [];
-
-    for (let i = 0; i <= 100; i++) {
-      const S = i / 100;
-      let payoff = 0;
-      for (const leg of legs) {
-        const intrinsic = leg.type === "call" ? Math.max(0, S - leg.strike) : Math.max(0, leg.strike - S);
-        payoff += leg.qty * intrinsic;
-      }
-      const pnl = payoff + netPremium;
-      points.push({ x: S, y: pnl });
-      if (pnl > maxProfit) maxProfit = pnl;
-      if (pnl < maxLoss) maxLoss = pnl;
-
-      if (i > 0) {
-        const prev = points[i - 1].y;
-        if ((prev <= 0 && pnl >= 0) || (prev >= 0 && pnl <= 0)) {
-          breakevens.push(S);
-        }
-      }
+  const handleSimDone = useCallback(async () => {
+    if (!selectedMarket) return;
+    const result = await placeBet(selectedMarket.id, side, spend);
+    setSimulating(false);
+    if (result.ok) {
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    } else {
+      setBetError(result.error ?? "Transaction failed");
     }
-    return { points, maxProfit, maxLoss, breakevens, netPremium };
-  }, [legs]);
-
-  // Solana wiring preview
-  const solanaPreview = useMemo(() => {
-    if (!selectedMarket || !quote) return null;
-    const marketIdBuf = selectedMarket.id;
-    const ammPoolPDA = `PDA("amm_pool", ${marketIdBuf})`;
-    const shareMintPDA = `PDA("share_mint", ${marketIdBuf}, "${side}")`;
-    return {
-      program: "ELThikt285QiyLBWPNiGbgTTzGvjvQhYjrV33VC8ZyoD",
-      ix: "swap_shares",
-      discriminator: "sha256('global:swap_shares')[0..8]",
-      args: `{ side: ${side === "YES" ? 1 : 0}, amount: ${Math.floor(spend * 1e6)}u64, min_shares: ${Math.floor((quote.minShares) * 1e6)}u64 }`,
-      accounts: [
-        { name: "amm_pool", pda: ammPoolPDA, writable: true, signer: false },
-        { name: "share_mint", pda: shareMintPDA, writable: true, signer: false },
-        { name: "user_share_ata", pda: "ATA(user, share_mint)", writable: true, signer: false },
-        { name: "user_usdc_ata", pda: "ATA(user, USDC_MINT)", writable: true, signer: false },
-        { name: "pool_usdc_vault", pda: "PDA('vault', amm_pool)", writable: true, signer: false },
-        { name: "user", pda: "wallet", writable: true, signer: true },
-        { name: "usdc_mint", pda: "EPjFWdd5...Dt1v", writable: false, signer: false },
-        { name: "token_program", pda: "TokenkegQ...5DA", writable: false, signer: false },
-        { name: "system_program", pda: "1111...1111", writable: false, signer: false },
-      ],
-    };
-  }, [selectedMarket, quote, side, spend]);
+  }, [selectedMarket, side, spend, placeBet]);
 
   if (!connected) {
     return (
       <div className="shell">
-        <div className="empty" style={{ marginTop: "3rem" }}>
-          <strong>Connect to start trading</strong>
-          <p style={{ marginTop: "0.5rem" }}>Log in to trade outcome shares on the LMSR exchange.</p>
-          <button className="btn btn-primary" style={{ marginTop: "1rem" }} onClick={() => router.push("/login")}>Log in</button>
+        <div className="trade-hero-empty">
+          <div className="trade-hero-empty-icon">
+            <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+              <circle cx="32" cy="32" r="32" fill="url(#solBg)" />
+              <defs>
+                <linearGradient id="solBg" x1="0" y1="0" x2="64" y2="64">
+                  <stop offset="0%" stopColor="#14F195" />
+                  <stop offset="100%" stopColor="#9945FF" />
+                </linearGradient>
+              </defs>
+              <path d="M18 40h18l10-8H28L18 40z" fill="#fff" opacity="0.9" />
+              <path d="M18 24h18l10 8H28L18 24z" fill="#fff" opacity="0.9" />
+              <path d="M18 32h28" stroke="#fff" strokeWidth="3" opacity="0.9" />
+            </svg>
+          </div>
+          <h1>Trade on Solana</h1>
+          <p>
+            Connect your wallet to trade outcome shares on Better's LMSR
+            exchange, powered by the Solana blockchain.
+          </p>
+          <button
+            className="btn btn-primary btn-lg"
+            onClick={() => router.push("/login")}
+          >
+            Connect Wallet
+          </button>
         </div>
       </div>
     );
@@ -336,7 +538,9 @@ export default function TradePage() {
       <div className="shell">
         <div className="empty" style={{ marginTop: "3rem" }}>
           <strong>No open markets</strong>
-          <p style={{ marginTop: "0.5rem" }}>There are no markets available for trading right now.</p>
+          <p style={{ marginTop: "0.5rem" }}>
+            There are no markets available for trading right now.
+          </p>
         </div>
       </div>
     );
@@ -344,405 +548,646 @@ export default function TradePage() {
 
   const spotYes = LMSR.price(b, qYes, qNo, "YES");
   const spotNo = LMSR.price(b, qYes, qNo, "NO");
+  const pctYes = spotYes * 100;
+  const pctNo = spotNo * 100;
+  const vol = volume(selectedMarket);
+  const timeLeft = relativeTime(selectedMarket.closesAt);
 
   return (
-    <div className="shell">
-      <div className="page-head">
-        <div>
+    <div className="shell trade-shell">
+      {/* Header */}
+      <div className="trade-header">
+        <div className="trade-header-left">
+          <div className="trade-sol-badge">
+            <svg width="16" height="16" viewBox="0 0 28 28" fill="none">
+              <circle cx="14" cy="14" r="14" fill="url(#solGradH)" />
+              <defs>
+                <linearGradient id="solGradH" x1="0" y1="0" x2="28" y2="28">
+                  <stop offset="0%" stopColor="#14F195" />
+                  <stop offset="100%" stopColor="#9945FF" />
+                </linearGradient>
+              </defs>
+              <path d="M8 17.5h8.5l3.5-3H11.5L8 17.5z" fill="#fff" />
+              <path d="M8 10.5h8.5l3.5 3H11.5L8 10.5z" fill="#fff" />
+              <path d="M8 14h12" stroke="#fff" strokeWidth="1.5" />
+            </svg>
+            <span>Solana Devnet</span>
+          </div>
           <h1>Trade</h1>
-          <div className="page-sub">LMSR Exchange · Devnet Sandbox</div>
         </div>
-        <button className={`btn ${showOptions ? "btn-primary" : ""}`} onClick={() => setShowOptions(!showOptions)}>
-          {showOptions ? "✕ Close Options" : "📊 Options Desk"}
-        </button>
+        <div className="trade-header-right">
+          <div className="trade-balance-chip">
+            <span className="trade-balance-label">Balance</span>
+            <span className="trade-balance-val">
+              ${balanceUsdc.toFixed(2)}
+            </span>
+            <span className="trade-balance-unit">USDC</span>
+          </div>
+        </div>
       </div>
 
       {/* Market selector */}
-      <div className="field" style={{ maxWidth: 500, marginBottom: "1.25rem" }}>
-        <label>Select Market</label>
-        <select className="select" value={selectedMarketId} onChange={e => setSelectedMarketId(e.target.value)} style={{ width: "100%" }}>
-          {openMarkets.map(m => (
-            <option key={m.id} value={m.id}>{m.question.slice(0, 70)}</option>
-          ))}
-        </select>
+      <div className="trade-market-selector">
+        {openMarkets.map((m) => (
+          <button
+            key={m.id}
+            className={`trade-market-chip ${
+              selectedMarketId === m.id ? "active" : ""
+            }`}
+            onClick={() => setSelectedMarketId(m.id)}
+          >
+            <span className="trade-market-chip-pct">
+              {yesPct(m)}%
+            </span>
+            <span className="trade-market-chip-q">
+              {m.question.length > 40
+                ? m.question.slice(0, 40) + "..."
+                : m.question}
+            </span>
+          </button>
+        ))}
       </div>
 
-      {/* Spot prices */}
-      <div className="pools" style={{ marginBottom: "1.25rem" }}>
-        <div className="pool yes">
-          <div className="pct">{(spotYes * 100).toFixed(1)}¢</div>
-          <div className="lbl">YES spot price</div>
-        </div>
-        <div className="pool no">
-          <div className="pct">{(spotNo * 100).toFixed(1)}¢</div>
-          <div className="lbl">NO spot price</div>
-        </div>
-        <div className="pool">
-          <div className="pct num" style={{ fontSize: "1.2rem" }}>b={b.toFixed(0)}</div>
-          <div className="lbl">Liquidity param</div>
-        </div>
+      {/* Trade mode tabs */}
+      <div className="trade-tabs">
+        <button
+          className={`trade-tab ${tradeTab === "strategies" ? "active" : ""}`}
+          onClick={() => setTradeTab("strategies")}
+        >
+          <span className="trade-tab-icon">📋</span> Strategies
+        </button>
+        <button
+          className={`trade-tab ${tradeTab === "custom" ? "active" : ""}`}
+          onClick={() => { setTradeTab("custom"); setActiveStrategy(null); }}
+        >
+          <span className="trade-tab-icon">⚙️</span> Custom Trade
+        </button>
       </div>
 
-      <div className="t-layout">
-        {/* ── Order Ticket ── */}
-        <div className="t-ticket">
-          <div className="panel">
-            <h2>Order Ticket</h2>
-
-            {/* Buy / Sell toggle */}
-            <div className="side-toggle" style={{ marginBottom: "0.75rem" }}>
-              <button className={`btn ${action === "buy" ? "btn-yes" : ""}`} onClick={() => setAction("buy")}>Buy</button>
-              <button className={`btn ${action === "sell" ? "btn-no" : ""}`} onClick={() => setAction("sell")}>Sell</button>
-            </div>
-
-            {/* YES / NO selector */}
-            <div className="side-toggle" style={{ marginBottom: "0.75rem" }}>
-              <button className={`btn ${side === "YES" ? "selected-yes" : "btn-yes-outline"}`} onClick={() => setSide("YES")}>
-                YES <span className="odd">{(spotYes * 100).toFixed(1)}¢</span>
+      {/* Strategies panel */}
+      {tradeTab === "strategies" && (
+        <div className="strat-panel">
+          <div className="strat-header">
+            <h2>Pick a Strategy</h2>
+            <p>Choose a trading approach — we'll set up the trade for you.</p>
+          </div>
+          <div className="strat-grid">
+            {strategies.map((s) => (
+              <button
+                key={s.id}
+                className={`strat-card ${activeStrategy === s.id ? "active" : ""}`}
+                onClick={() => applyStrategy(s)}
+              >
+                <div className="strat-card-top">
+                  <span className="strat-card-icon">{s.icon}</span>
+                  <span className={`strat-card-tag ${s.tag.toLowerCase().replace(/\s+/g, "-")}`}>{s.tag}</span>
+                </div>
+                <div className="strat-card-name">{s.name}</div>
+                <div className="strat-card-desc">{s.desc}</div>
+                <div className="strat-card-detail">{s.detail}</div>
+                <div className="strat-card-action">
+                  Apply Strategy →
+                </div>
               </button>
-              <button className={`btn ${side === "NO" ? "selected-no" : "btn-no-outline"}`} onClick={() => setSide("NO")}>
-                NO <span className="odd">{(spotNo * 100).toFixed(1)}¢</span>
-              </button>
-            </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-            {/* Spend amount */}
-            <div className="field">
-              <label>Spend (USD)</label>
-              <input type="number" min="0.01" step="0.01" value={spendStr}
-                onChange={e => setSpendStr(e.target.value)}
-                style={{ fontSize: "1.1rem", fontWeight: 800 }} />
-            </div>
-
-            {/* Quote */}
-            {quote && (
-              <div className="t-quote">
-                <div className="est"><span>Shares received</span><b className="num">{quote.shares.toFixed(4)}</b></div>
-                <div className="est"><span>Avg price</span><b className="num">{(quote.avgPrice * 100).toFixed(2)}¢</b></div>
-                <div className="est"><span>Spot price (before)</span><b className="num">{(quote.spotBefore * 100).toFixed(2)}¢</b></div>
-                <div className="est"><span>Spot price (after)</span><b className="num">{(quote.spotAfter * 100).toFixed(2)}¢</b></div>
-                <div className="est"><span>Price impact</span><b className={`num ${quote.impact > 5 ? "accent" : ""}`}>{quote.impact.toFixed(2)}%</b></div>
-                <div className="est"><span>New probability (YES)</span><b className="num">{quote.newProbYes.toFixed(1)}%</b></div>
-                <div className="est"><span>LP fee (0.3%)</span><b className="num">${quote.lpFee.toFixed(4)}</b></div>
+      <div className="trade-main-grid" style={tradeTab === "strategies" ? { display: "none" } : undefined}>
+        {/* ═══ LEFT: Market Context ═══ */}
+        <div className="trade-context">
+          {/* Market Card */}
+          <div className="trade-market-card">
+            {selectedMarket.image && (
+              <div className="trade-market-img">
+                <img
+                  src={selectedMarket.image}
+                  alt=""
+                />
+                <div className="trade-market-img-overlay" />
               </div>
             )}
-
-            {/* Slippage */}
-            <div className="field" style={{ marginTop: "0.5rem" }}>
-              <label>Slippage tolerance: {slippage}%</label>
-              <input type="range" min="0.1" max="10" step="0.1" value={slippage}
-                onChange={e => setSlippage(parseFloat(e.target.value))}
-                style={{ accentColor: "var(--accent)" }} />
-              {quote && <div className="hint">Min shares: {quote.minShares.toFixed(4)}</div>}
-            </div>
-
-            <button className="btn btn-primary btn-block" style={{ marginTop: "0.5rem" }}
-              disabled={!quote || spend > balanceUsdc}>
-              {action === "buy" ? "Buy" : "Sell"} {side} Shares
-            </button>
-            {spend > balanceUsdc && <div className="hint err">Insufficient balance</div>}
-
-            <div className="info-box" style={{ marginTop: "0.75rem", fontSize: "0.78rem" }}>
-              🧪 Devnet sandbox — no real funds are at risk. Transactions are simulated client-side.
+            <div className="trade-market-info">
+              <h2 className="trade-market-q">
+                {selectedMarket.question}
+              </h2>
+              <p className="trade-market-desc">
+                {selectedMarket.description}
+              </p>
+              <div className="trade-market-meta">
+                <span>Closes {timeLeft}</span>
+                <span className="trade-meta-sep" />
+                <span>{selectedMarket.participants} traders</span>
+                <span className="trade-meta-sep" />
+                <span>${vol.toFixed(0)} volume</span>
+              </div>
             </div>
           </div>
 
-          {/* ── Solana Instruction Preview ── */}
-          {solanaPreview && (
-            <div className="panel" style={{ marginTop: "1rem" }}>
-              <h3>Solana Instruction Preview</h3>
-              <div className="t-solana-preview">
-                <div className="t-sol-row"><span className="dim">Program</span><span className="mono" style={{ fontSize: "0.75rem" }}>{solanaPreview.program}</span></div>
-                <div className="t-sol-row"><span className="dim">Instruction</span><span className="mono">{solanaPreview.ix}</span></div>
-                <div className="t-sol-row"><span className="dim">Discriminator</span><span className="mono" style={{ fontSize: "0.75rem" }}>{solanaPreview.discriminator}</span></div>
-                <div className="t-sol-row"><span className="dim">Args (Borsh)</span><span className="mono" style={{ fontSize: "0.72rem", wordBreak: "break-all" }}>{solanaPreview.args}</span></div>
-                <div style={{ marginTop: "0.5rem" }}>
-                  <div style={{ fontSize: "0.78rem", fontWeight: 700, marginBottom: "0.3rem" }}>Accounts:</div>
-                  <div style={{ overflowX: "auto" }}>
-                    <table className="board" style={{ fontSize: "0.75rem" }}>
-                      <thead>
-                        <tr><th>#</th><th>Name</th><th>PDA / Key</th><th>W</th><th>S</th></tr>
-                      </thead>
-                      <tbody>
-                        {solanaPreview.accounts.map((a, i) => (
-                          <tr key={i}>
-                            <td className="faint">{i}</td>
-                            <td style={{ fontWeight: 600 }}>{a.name}</td>
-                            <td className="mono" style={{ fontSize: "0.68rem", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis" }}>{a.pda}</td>
-                            <td>{a.writable ? "✓" : ""}</td>
-                            <td>{a.signer ? "✓" : ""}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+          {/* Probability Ring */}
+          <div className="trade-prob-section">
+            <ProbRing yes={pctYes} size={200} />
+            <div className="trade-prob-stats">
+              <div className="trade-prob-stat yes">
+                <div className="trade-prob-stat-val">
+                  {pctYes.toFixed(1)}¢
+                </div>
+                <div className="trade-prob-stat-label">YES Price</div>
+                <div className="trade-prob-stat-pool">
+                  ${selectedMarket.yesPool.toFixed(0)} pool
+                </div>
+              </div>
+              <div className="trade-prob-stat no">
+                <div className="trade-prob-stat-val">
+                  {pctNo.toFixed(1)}¢
+                </div>
+                <div className="trade-prob-stat-label">NO Price</div>
+                <div className="trade-prob-stat-pool">
+                  ${selectedMarket.noPool.toFixed(0)} pool
                 </div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
 
-        {/* ── Right column ── */}
-        <div className="t-right">
-          {/* Depth Ladder */}
-          <div className="panel">
-            <h3>Depth Ladder</h3>
-            <div style={{ overflowX: "auto" }}>
-              <table className="board">
-                <thead>
-                  <tr>
-                    <th>Spend</th>
-                    <th className="right" style={{ color: "var(--yes)" }}>YES Spot</th>
-                    <th className="right" style={{ color: "var(--yes)" }}>YES After</th>
-                    <th className="right" style={{ color: "var(--no)" }}>NO Spot</th>
-                    <th className="right" style={{ color: "var(--no)" }}>NO After</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ladder.map(l => (
-                    <tr key={l.size}>
-                      <td className="num" style={{ fontWeight: 700 }}>${l.size}</td>
-                      <td className="right num">{(l.bidYes * 100).toFixed(2)}¢</td>
-                      <td className="right num">{(l.askYes * 100).toFixed(2)}¢</td>
-                      <td className="right num">{(l.bidNo * 100).toFixed(2)}¢</td>
-                      <td className="right num">{(l.askNo * 100).toFixed(2)}¢</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* Live trades tape */}
+          <div className="trade-tape-panel">
+            <div className="trade-tape-header">
+              <div className="live-badge sm">
+                <div className="live-dot" />
+                LIVE
+              </div>
+              <span>Recent Trades</span>
+            </div>
+            <div className="trade-tape-list">
+              {marketTrades.length === 0 && (
+                <div className="trade-tape-empty">
+                  No recent trades on this market
+                </div>
+              )}
+              {marketTrades.map((t) => (
+                <div key={t.id} className="trade-tape-row">
+                  <div
+                    className="trade-tape-avatar"
+                    style={{
+                      background: t.color,
+                    }}
+                  >
+                    {t.avatar}
+                  </div>
+                  <div className="trade-tape-info">
+                    <span className="trade-tape-user">
+                      @{t.username}
+                    </span>
+                    <span
+                      className={`trade-tape-side ${t.side.toLowerCase()}`}
+                    >
+                      {t.side}
+                    </span>
+                  </div>
+                  <div className="trade-tape-amt">
+                    ${t.amount}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Position Panel */}
-          <div className="panel">
-            <h3>Your Positions</h3>
-            {myPositions.length === 0 ? (
-              <div className="faint" style={{ fontSize: "0.88rem" }}>No open positions</div>
-            ) : (
-              <div className="stack" style={{ gap: "0.35rem" }}>
-                {myPositions.slice(0, 8).map(p => {
-                  const m = markets.find(mk => mk.id === p.marketId);
+          {/* Positions */}
+          {myPositions.length > 0 && (
+            <div className="trade-positions-panel">
+              <h3>Your Positions</h3>
+              <div className="trade-positions-list">
+                {myPositions.slice(0, 6).map((p) => {
+                  const m = markets.find((mk) => mk.id === p.marketId);
                   if (!m) return null;
-                  const mB = Math.max(20, (m.yesPool + m.noPool) * 0.15);
-                  const markPrice = LMSR.price(mB, m.yesPool, m.noPool, p.side);
-                  const markValue = p.amount * markPrice / (p.side === "YES"
-                    ? LMSR.price(mB, m.yesPool, m.noPool, "YES")
-                    : LMSR.price(mB, m.yesPool, m.noPool, "NO"));
+                  const mB = Math.max(
+                    20,
+                    (m.yesPool + m.noPool) * 0.15
+                  );
+                  const markPrice = LMSR.price(
+                    mB,
+                    m.yesPool,
+                    m.noPool,
+                    p.side
+                  );
+                  const markValue = p.amount * markPrice;
+                  const pnl = markValue - p.amount;
                   return (
-                    <div key={p.id} className="w-exposure-row" onClick={() => router.push(`/market/${m.id}`)}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: "0.85rem", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {m.question.slice(0, 42)}{m.question.length > 42 ? "…" : ""}
+                    <div
+                      key={p.id}
+                      className="trade-position-row"
+                      onClick={() => router.push(`/market/${m.id}`)}
+                    >
+                      <div className="trade-position-main">
+                        <div className="trade-position-q">
+                          {m.question.length > 45
+                            ? m.question.slice(0, 45) + "..."
+                            : m.question}
                         </div>
-                        <div className="faint" style={{ fontSize: "0.78rem" }}>{p.side} · {p.amount.toFixed(2)} shares</div>
+                        <div className="trade-position-meta">
+                          <span
+                            className={`trade-position-side ${p.side.toLowerCase()}`}
+                          >
+                            {p.side}
+                          </span>
+                          <span>
+                            ${p.amount.toFixed(2)} staked
+                          </span>
+                        </div>
                       </div>
-                      <div style={{ textAlign: "right", flexShrink: 0 }}>
-                        <div style={{ fontSize: "0.88rem", fontWeight: 800 }}>${markValue.toFixed(2)}</div>
-                        <div className="faint" style={{ fontSize: "0.72rem" }}>mark value</div>
+                      <div className="trade-position-value">
+                        <div className="trade-position-mark">
+                          ${markValue.toFixed(2)}
+                        </div>
+                        <div
+                          className={`trade-position-pnl ${
+                            pnl >= 0 ? "up" : "down"
+                          }`}
+                        >
+                          {pnl >= 0 ? "+" : ""}
+                          {pnl.toFixed(2)}
+                        </div>
                       </div>
                     </div>
                   );
                 })}
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* ═══ RIGHT: Trading Panel ═══ */}
+        <div className="trade-panel-sticky">
+          <div className="trade-panel">
+            {/* Solana Program Badge */}
+            <div className="trade-panel-program">
+              <svg width="14" height="14" viewBox="0 0 28 28" fill="none">
+                <circle cx="14" cy="14" r="14" fill="url(#solGradP)" />
+                <defs>
+                  <linearGradient
+                    id="solGradP"
+                    x1="0"
+                    y1="0"
+                    x2="28"
+                    y2="28"
+                  >
+                    <stop offset="0%" stopColor="#14F195" />
+                    <stop offset="100%" stopColor="#9945FF" />
+                  </linearGradient>
+                </defs>
+                <path
+                  d="M8 17.5h8.5l3.5-3H11.5L8 17.5z"
+                  fill="#fff"
+                />
+                <path
+                  d="M8 10.5h8.5l3.5 3H11.5L8 10.5z"
+                  fill="#fff"
+                />
+                <path
+                  d="M8 14h12"
+                  stroke="#fff"
+                  strokeWidth="1.5"
+                />
+              </svg>
+              <span className="mono" style={{ fontSize: "0.7rem" }}>
+                better_protocol
+              </span>
+              <span className="trade-panel-network">devnet</span>
+            </div>
+
+            {/* Active strategy banner */}
+            {activeStrategy && (
+              <div className="strat-active-banner">
+                <span className="strat-active-icon">
+                  {strategies.find((s) => s.id === activeStrategy)?.icon}
+                </span>
+                <div className="strat-active-info">
+                  <strong>{strategies.find((s) => s.id === activeStrategy)?.name}</strong>
+                  <span>Strategy applied — adjust below if needed</span>
+                </div>
+                <button
+                  className="strat-active-clear"
+                  onClick={() => setActiveStrategy(null)}
+                >
+                  ✕
+                </button>
+              </div>
             )}
+
+            {/* Side selector */}
+            <div className="trade-side-selector">
+              <button
+                className={`trade-side-btn yes ${
+                  side === "YES" ? "active" : ""
+                }`}
+                onClick={() => setSide("YES")}
+              >
+                <span className="trade-side-label">YES</span>
+                <span className="trade-side-price">
+                  {pctYes.toFixed(1)}¢
+                </span>
+              </button>
+              <button
+                className={`trade-side-btn no ${
+                  side === "NO" ? "active" : ""
+                }`}
+                onClick={() => setSide("NO")}
+              >
+                <span className="trade-side-label">NO</span>
+                <span className="trade-side-price">
+                  {pctNo.toFixed(1)}¢
+                </span>
+              </button>
+            </div>
+
+            {/* Amount */}
+            <div className="trade-amount-section">
+              <label className="trade-input-label">Amount (USDC)</label>
+              <div className="trade-amount-input-wrap">
+                <span className="trade-amount-prefix">$</span>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={spendStr}
+                  onChange={(e) => setSpendStr(e.target.value)}
+                  className="trade-amount-input"
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="trade-quick-chips">
+                {QUICK_AMOUNTS.map((v) => (
+                  <button
+                    key={v}
+                    className={`trade-quick-chip ${
+                      spend === v ? "active" : ""
+                    }`}
+                    onClick={() => setSpendStr(String(v))}
+                  >
+                    ${v}
+                  </button>
+                ))}
+                <button
+                  className="trade-quick-chip max"
+                  onClick={() =>
+                    setSpendStr(Math.floor(balanceUsdc).toString())
+                  }
+                >
+                  MAX
+                </button>
+              </div>
+            </div>
+
+            {/* Quote */}
+            {quote && !simulating && !showSuccess && (
+              <div className="trade-quote">
+                <div className="trade-quote-row highlight">
+                  <span>Potential Payout</span>
+                  <span className="trade-quote-payout">
+                    ${quote.potentialPayout.toFixed(2)}
+                  </span>
+                </div>
+                {quote.charityDonation > 0 && (
+                  <div className="trade-charity-split">
+                    <div className="trade-charity-row you">
+                      <span>Your Profit (50%)</span>
+                      <span className="num">${quote.yourProfit.toFixed(2)}</span>
+                    </div>
+                    <div className="trade-charity-row charity">
+                      <span>🌱 Charity Donation (50%)</span>
+                      <span className="num">${quote.charityDonation.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
+                <div className="trade-quote-row">
+                  <span>Shares</span>
+                  <span className="num">
+                    {quote.shares.toFixed(2)}
+                  </span>
+                </div>
+                <div className="trade-quote-row">
+                  <span>Avg Price</span>
+                  <span className="num">
+                    {(quote.avgPrice * 100).toFixed(2)}¢
+                  </span>
+                </div>
+                <div className="trade-quote-row">
+                  <span>Price Impact</span>
+                  <span
+                    className={`num ${
+                      quote.impact > 5 ? "accent" : ""
+                    }`}
+                  >
+                    {quote.impact.toFixed(2)}%
+                  </span>
+                </div>
+                <div className="trade-quote-row">
+                  <span>LP Fee</span>
+                  <span className="num">
+                    ${quote.lpFee.toFixed(4)}
+                  </span>
+                </div>
+
+                {/* Price impact bar */}
+                <div className="trade-impact-bar">
+                  <div
+                    className="trade-impact-fill"
+                    style={{
+                      width: `${Math.min(100, quote.impact * 10)}%`,
+                    }}
+                  />
+                </div>
+
+                {/* Slippage */}
+                <div className="trade-slippage">
+                  <span>Slippage: {slippage}%</span>
+                  <div className="trade-slippage-chips">
+                    {[0.5, 1, 2, 5].map((v) => (
+                      <button
+                        key={v}
+                        className={`trade-slip-chip ${
+                          slippage === v ? "active" : ""
+                        }`}
+                        onClick={() => setSlippage(v)}
+                      >
+                        {v}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Simulator */}
+            <SolanaSimulator
+              active={simulating}
+              side={side}
+              amount={spend}
+              onDone={handleSimDone}
+            />
+
+            {/* Success */}
+            {showSuccess && (
+              <div className="trade-success">
+                <div className="trade-success-icon">&#x2713;</div>
+                <div className="trade-success-text">
+                  Trade Confirmed on Solana
+                </div>
+                <div className="trade-success-detail">
+                  Bought {side} shares for ${spend.toFixed(2)} USDC
+                </div>
+                <div className="trade-charity-badge">
+                  🌱 50% of profits go to charity if you win
+                </div>
+              </div>
+            )}
+
+            {/* Error */}
+            {betError && (
+              <div className="trade-error">
+                {betError}
+              </div>
+            )}
+
+            {/* Trade button */}
+            {!simulating && !showSuccess && (
+              <button
+                className={`trade-submit-btn ${side.toLowerCase()}`}
+                disabled={!quote || spend > balanceUsdc || spend <= 0}
+                onClick={handleTrade}
+              >
+                {spend > balanceUsdc ? (
+                  "Insufficient USDC Balance"
+                ) : (
+                  <>
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 28 28"
+                      fill="none"
+                    >
+                      <circle
+                        cx="14"
+                        cy="14"
+                        r="14"
+                        fill="rgba(255,255,255,0.2)"
+                      />
+                      <path
+                        d="M8 17.5h8.5l3.5-3H11.5L8 17.5z"
+                        fill="#fff"
+                      />
+                      <path
+                        d="M8 10.5h8.5l3.5 3H11.5L8 10.5z"
+                        fill="#fff"
+                      />
+                      <path
+                        d="M8 14h12"
+                        stroke="#fff"
+                        strokeWidth="1.5"
+                      />
+                    </svg>
+                    Buy {side} — ${spend.toFixed(2)} USDC
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* Solana instruction preview (collapsed) */}
+            <details className="trade-ix-details">
+              <summary>View Solana Instruction</summary>
+              <div className="trade-ix-content">
+                <div className="trade-ix-row">
+                  <span>Program</span>
+                  <span className="mono">ELThikt...ZyoD</span>
+                </div>
+                <div className="trade-ix-row">
+                  <span>Instruction</span>
+                  <span className="mono">swap_shares</span>
+                </div>
+                <div className="trade-ix-row">
+                  <span>Side</span>
+                  <span className="mono">
+                    {side === "YES" ? "1" : "0"}
+                  </span>
+                </div>
+                <div className="trade-ix-row">
+                  <span>Amount</span>
+                  <span className="mono">
+                    {Math.floor(spend * 1e6)}
+                  </span>
+                </div>
+                <div className="trade-ix-row">
+                  <span>Min Shares</span>
+                  <span className="mono">
+                    {quote
+                      ? Math.floor(quote.minShares * 1e6)
+                      : 0}
+                  </span>
+                </div>
+                <div className="trade-ix-accounts">
+                  <div className="trade-ix-account">
+                    amm_pool{" "}
+                    <span className="faint">
+                      PDA("amm_pool", market)
+                    </span>
+                  </div>
+                  <div className="trade-ix-account">
+                    share_mint{" "}
+                    <span className="faint">
+                      PDA("share_mint", market, "{side}")
+                    </span>
+                  </div>
+                  <div className="trade-ix-account">
+                    user_share_ata{" "}
+                    <span className="faint">
+                      ATA(wallet, share_mint)
+                    </span>
+                  </div>
+                  <div className="trade-ix-account">
+                    pool_usdc_vault{" "}
+                    <span className="faint">
+                      PDA("vault", amm_pool)
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <div className="trade-sandbox-notice">
+              <svg width="14" height="14" viewBox="0 0 28 28" fill="none">
+                <circle cx="14" cy="14" r="14" fill="url(#solGradN)" />
+                <defs>
+                  <linearGradient
+                    id="solGradN"
+                    x1="0"
+                    y1="0"
+                    x2="28"
+                    y2="28"
+                  >
+                    <stop offset="0%" stopColor="#14F195" />
+                    <stop offset="100%" stopColor="#9945FF" />
+                  </linearGradient>
+                </defs>
+                <path
+                  d="M8 17.5h8.5l3.5-3H11.5L8 17.5z"
+                  fill="#fff"
+                />
+                <path
+                  d="M8 10.5h8.5l3.5 3H11.5L8 10.5z"
+                  fill="#fff"
+                />
+                <path
+                  d="M8 14h12"
+                  stroke="#fff"
+                  strokeWidth="1.5"
+                />
+              </svg>
+              Devnet sandbox · 50% of winning profits donated to charity
+            </div>
           </div>
         </div>
       </div>
-
-      {/* ══════════════════════════════════════════════════════════════════
-         Options Desk
-         ══════════════════════════════════════════════════════════════════ */}
-      {showOptions && (
-        <div className="t-options" style={{ marginTop: "1.5rem" }}>
-          <div className="panel">
-            <div className="between" style={{ marginBottom: "1rem" }}>
-              <h2 style={{ margin: 0 }}>Options Desk</h2>
-              <div className="faint" style={{ fontSize: "0.82rem" }}>
-                Underlying: {(underlying * 100).toFixed(1)}¢ · T: {(T * 365).toFixed(0)}d · σ: {impliedVol}%
-              </div>
-            </div>
-
-            {/* Implied vol slider */}
-            <div className="field" style={{ maxWidth: 400 }}>
-              <label>Implied Volatility: {impliedVol}%</label>
-              <input type="range" min="10" max="200" step="1" value={impliedVol}
-                onChange={e => setImpliedVol(parseInt(e.target.value))}
-                style={{ accentColor: "var(--accent)" }} />
-            </div>
-
-            {/* Strategy presets */}
-            <div style={{ marginBottom: "1rem" }}>
-              <label>Strategy</label>
-              <div className="pills">
-                {(Object.entries(STRATEGY_PRESETS) as [StrategyPreset, typeof STRATEGY_PRESETS["custom"]][]).map(([k, v]) => (
-                  <button key={k} className={`pill ${stratPreset === k ? "active" : ""}`}
-                    onClick={() => applyPreset(k as StrategyPreset)}>
-                    {v.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Leg builder */}
-            <div className="between" style={{ marginBottom: "0.5rem" }}>
-              <h3 style={{ margin: 0 }}>Legs</h3>
-              <div className="row" style={{ gap: "0.35rem" }}>
-                <button className="btn btn-sm btn-yes-outline" onClick={() => addLeg("call")}>+ Call</button>
-                <button className="btn btn-sm btn-no-outline" onClick={() => addLeg("put")}>+ Put</button>
-              </div>
-            </div>
-
-            {legs.length === 0 ? (
-              <div className="faint" style={{ fontSize: "0.88rem", marginBottom: "1rem" }}>Add legs or select a strategy preset above</div>
-            ) : (
-              <div style={{ overflowX: "auto", marginBottom: "1rem" }}>
-                <table className="board">
-                  <thead>
-                    <tr>
-                      <th>Type</th><th>Strike</th><th>Qty</th><th className="right">Premium</th>
-                      <th className="right">Δ</th><th className="right">Γ</th><th className="right">Θ</th><th className="right">V</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {legs.map(l => (
-                      <tr key={l.id}>
-                        <td>
-                          <select className="select" value={l.type} onChange={e => updateLeg(l.id, { type: e.target.value as "call" | "put" })}
-                            style={{ width: 70, padding: "0.2rem 0.3rem", fontSize: "0.8rem" }}>
-                            <option value="call">Call</option>
-                            <option value="put">Put</option>
-                          </select>
-                        </td>
-                        <td>
-                          <input type="number" min="0.01" max="0.99" step="0.05" value={l.strike}
-                            onChange={e => updateLeg(l.id, { strike: parseFloat(e.target.value) || 0.5 })}
-                            style={{ width: 70, padding: "0.2rem 0.3rem", fontSize: "0.8rem" }} />
-                        </td>
-                        <td>
-                          <input type="number" min="-10" max="10" step="1" value={l.qty}
-                            onChange={e => updateLeg(l.id, { qty: parseInt(e.target.value) || 1 })}
-                            style={{ width: 60, padding: "0.2rem 0.3rem", fontSize: "0.8rem" }} />
-                        </td>
-                        <td className="right num" style={{ fontWeight: 700 }}>${l.premium.toFixed(4)}</td>
-                        <td className="right num">{l.greeks.delta.toFixed(3)}</td>
-                        <td className="right num">{l.greeks.gamma.toFixed(3)}</td>
-                        <td className="right num">{l.greeks.theta.toFixed(4)}</td>
-                        <td className="right num">{l.greeks.vega.toFixed(4)}</td>
-                        <td><button className="x-btn" onClick={() => removeLeg(l.id)}>✕</button></td>
-                      </tr>
-                    ))}
-                    {legs.length > 0 && (
-                      <tr style={{ fontWeight: 800 }}>
-                        <td colSpan={3}>Net</td>
-                        <td className="right num">${legs.reduce((s, l) => s + (l.qty > 0 ? -l.premium : l.premium), 0).toFixed(4)}</td>
-                        <td className="right num">{legs.reduce((s, l) => s + l.greeks.delta * l.qty, 0).toFixed(3)}</td>
-                        <td className="right num">{legs.reduce((s, l) => s + l.greeks.gamma * l.qty, 0).toFixed(3)}</td>
-                        <td className="right num">{legs.reduce((s, l) => s + l.greeks.theta * l.qty, 0).toFixed(4)}</td>
-                        <td className="right num">{legs.reduce((s, l) => s + l.greeks.vega * l.qty, 0).toFixed(4)}</td>
-                        <td></td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* SVG Payoff Diagram */}
-            {payoffData && (
-              <div>
-                <h3>Payoff at Expiry</h3>
-                <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginBottom: "0.75rem", fontSize: "0.85rem" }}>
-                  <div><span className="dim">Max Profit: </span><strong style={{ color: "var(--yes)" }}>${payoffData.maxProfit.toFixed(4)}</strong></div>
-                  <div><span className="dim">Max Loss: </span><strong style={{ color: "var(--no)" }}>${payoffData.maxLoss.toFixed(4)}</strong></div>
-                  {payoffData.breakevens.length > 0 && (
-                    <div><span className="dim">Breakeven: </span><strong>{payoffData.breakevens.map(be => (be * 100).toFixed(1) + "¢").join(", ")}</strong></div>
-                  )}
-                  <div><span className="dim">Net Premium: </span><strong>${payoffData.netPremium.toFixed(4)}</strong></div>
-                </div>
-
-                <svg viewBox="0 0 600 250" style={{ width: "100%", maxWidth: 700, background: "var(--card-2)", borderRadius: "var(--r-card)", border: "1px solid var(--border)" }}>
-                  {/* Grid */}
-                  <line x1="50" y1="20" x2="50" y2="220" stroke="var(--border-bright)" strokeWidth="1" />
-                  <line x1="50" y1="220" x2="580" y2="220" stroke="var(--border-bright)" strokeWidth="1" />
-
-                  {/* Zero line */}
-                  {(() => {
-                    const range = payoffData.maxProfit - payoffData.maxLoss;
-                    const pad = range * 0.1 || 0.01;
-                    const yMin = payoffData.maxLoss - pad;
-                    const yMax = payoffData.maxProfit + pad;
-                    const zeroY = 220 - ((0 - yMin) / (yMax - yMin)) * 200;
-                    return <line x1="50" y1={zeroY} x2="580" y2={zeroY} stroke="var(--text-faint)" strokeWidth="1" strokeDasharray="4,4" />;
-                  })()}
-
-                  {/* P/L curve */}
-                  {(() => {
-                    const range = payoffData.maxProfit - payoffData.maxLoss;
-                    const pad = range * 0.1 || 0.01;
-                    const yMin = payoffData.maxLoss - pad;
-                    const yMax = payoffData.maxProfit + pad;
-                    const pts = payoffData.points.map(p => {
-                      const px = 50 + p.x * 530;
-                      const py = 220 - ((p.y - yMin) / (yMax - yMin)) * 200;
-                      return `${px},${py}`;
-                    });
-                    return <polyline points={pts.join(" ")} fill="none" stroke="var(--accent)" strokeWidth="2.5" />;
-                  })()}
-
-                  {/* Fill above/below zero */}
-                  {(() => {
-                    const range = payoffData.maxProfit - payoffData.maxLoss;
-                    const pad = range * 0.1 || 0.01;
-                    const yMin = payoffData.maxLoss - pad;
-                    const yMax = payoffData.maxProfit + pad;
-                    const zeroY = 220 - ((0 - yMin) / (yMax - yMin)) * 200;
-
-                    const pts = payoffData.points.map(p => ({
-                      x: 50 + p.x * 530,
-                      y: 220 - ((p.y - yMin) / (yMax - yMin)) * 200,
-                    }));
-
-                    const abovePath = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${Math.min(p.y, zeroY)}`).join(" ")
-                      + `L${pts[pts.length - 1].x},${zeroY}L${pts[0].x},${zeroY}Z`;
-                    const belowPath = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${Math.max(p.y, zeroY)}`).join(" ")
-                      + `L${pts[pts.length - 1].x},${zeroY}L${pts[0].x},${zeroY}Z`;
-
-                    return (
-                      <>
-                        <path d={abovePath} fill="rgba(22,163,74,0.12)" />
-                        <path d={belowPath} fill="rgba(239,68,68,0.12)" />
-                      </>
-                    );
-                  })()}
-
-                  {/* Breakeven markers */}
-                  {payoffData.breakevens.map((be, i) => {
-                    const x = 50 + be * 530;
-                    return (
-                      <g key={i}>
-                        <line x1={x} y1="20" x2={x} y2="220" stroke="var(--amber)" strokeWidth="1" strokeDasharray="3,3" />
-                        <text x={x} y="235" textAnchor="middle" fill="var(--amber)" fontSize="9" fontWeight="700">{(be * 100).toFixed(0)}¢</text>
-                      </g>
-                    );
-                  })}
-
-                  {/* Underlying marker */}
-                  {(() => {
-                    const x = 50 + underlying * 530;
-                    return <line x1={x} y1="20" x2={x} y2="220" stroke="var(--accent)" strokeWidth="1" strokeDasharray="2,2" opacity="0.5" />;
-                  })()}
-
-                  {/* Axis labels */}
-                  <text x="315" y="248" textAnchor="middle" fill="var(--text-faint)" fontSize="10">Underlying Price at Expiry</text>
-                  <text x="55" y="15" fill="var(--text-faint)" fontSize="9">P/L</text>
-                  <text x="55" y="232" fill="var(--text-faint)" fontSize="9">0¢</text>
-                  <text x="575" y="232" fill="var(--text-faint)" fontSize="9">100¢</text>
-                </svg>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

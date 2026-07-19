@@ -1,11 +1,11 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
-export const SESSION_COOKIE = "echo_session";
+export const SESSION_COOKIE = "better_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 function secret(): Uint8Array {
-  return new TextEncoder().encode(process.env.JWT_SECRET ?? "echo-dev-secret");
+  return new TextEncoder().encode(process.env.JWT_SECRET ?? "better-dev-secret");
 }
 
 export interface SessionPayload {

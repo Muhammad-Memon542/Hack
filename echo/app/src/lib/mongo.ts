@@ -14,7 +14,7 @@ import { MongoClient, type Db } from "mongodb";
  */
 
 const uri = process.env.MONGODB_URI;
-const dbName = process.env.MONGODB_DB || "echo";
+const dbName = process.env.MONGODB_DB || "better";
 
 export const mongoEnabled = !!uri;
 

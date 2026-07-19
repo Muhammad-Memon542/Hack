@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * unifold-signature). We verify the signature against the RAW body before
  * trusting anything, reject stale events (replay window), and apply the status
  * idempotently by event id. On `deposit.direct_execution.completed` the deposit
- * is credited to the user's Echo balance exactly once.
+ * is credited to the user's Better balance exactly once.
  *
  * Point a Unifold webhook endpoint at this URL and set UNIFOLD_WEBHOOK_SECRET
  * to the endpoint's signing secret. For local testing without a public tunnel,

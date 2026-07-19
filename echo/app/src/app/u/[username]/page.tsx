@@ -156,7 +156,7 @@ export default function ProfilePage() {
               {user.echoScore}
             </div>
             <div className="faint" style={{ fontSize: "0.8rem" }}>
-              Echo Score · {echoPercentile(user.echoScore)}
+              Better Score · {echoPercentile(user.echoScore)}
             </div>
           </div>
         </div>

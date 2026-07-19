@@ -16,12 +16,12 @@ export default function ForYouPage() {
   if (!connected) {
     return (
       <div style={{ maxWidth: 720, margin: "3rem auto", textAlign: "center" }}>
-        <h1 style={{ fontSize: "clamp(2rem,5vw,3rem)", fontWeight: 800, letterSpacing: "-0.04em", lineHeight: 1.05 }}>
-          Bet on the <span className="accent">people</span> around you.
+        <h1 style={{ fontSize: "clamp(2rem,5vw,3rem)", fontWeight: 800, letterSpacing: "-0.04em", lineHeight: 1.05, background: "linear-gradient(135deg, #9945FF 0%, #16161d 50%, #14F195 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+          Your takes. Your stakes.
         </h1>
         <p className="dim" style={{ fontSize: "1.1rem", margin: "1.2rem auto 0", maxWidth: "56ch" }}>
-          Echo turns local gossip into liquid markets. Winners route a slice of their yield straight
-          back to the person the bet is about — a closed-loop funding mechanism, settled on Solana.
+          Better turns predictions into impact. 50% of every winning payout goes to charity,
+          and every transaction offsets its carbon footprint — a better, more charitable way to bet on Solana.
         </p>
         <div className="row" style={{ justifyContent: "center", marginTop: "1.8rem" }}>
           <button className="btn btn-primary" onClick={connect}>Connect wallet</button>
@@ -57,7 +57,7 @@ export default function ForYouPage() {
                   <div>
                     <Link href={`/u/${u.username}`} className="uname">@{u.username}</Link>
                     <div className="faint" style={{ fontSize: "0.8rem" }}>
-                      Echo {u.echoScore} · {echoPercentile(u.echoScore)} · {Math.round(u.accuracy * 100)}% accuracy
+                      Better {u.echoScore} · {echoPercentile(u.echoScore)} · {Math.round(u.accuracy * 100)}% accuracy
                     </div>
                   </div>
                 </div>

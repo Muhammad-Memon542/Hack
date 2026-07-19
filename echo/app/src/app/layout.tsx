@@ -7,9 +7,9 @@ import { DepositModal } from "@/components/DepositModal";
 import { LiveTicker } from "@/components/LiveTicker";
 
 export const metadata: Metadata = {
-  title: "Echo — bet on the people around you",
+  title: "Better — Your takes. Your stakes.",
   description:
-    "Echo turns local gossip into liquid markets. Winners route a slice of their yield straight back to the person the bet is about — settled on Solana.",
+    "Better is a more charitable way to bet. 50% of winning profits go to charity, every transaction offsets its carbon footprint — prediction markets settled on Solana.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

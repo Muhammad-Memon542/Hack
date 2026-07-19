@@ -5,7 +5,7 @@ import Unifold from "@unifold/node";
  * Server-side Unifold client. The SECRET key never leaves the server — the
  * browser only ever talks to our own /api/deposits routes, which proxy to
  * Unifold. This keeps the credential off the client and lets us reconcile
- * every deposit against our own ledger before crediting an Echo balance.
+ * every deposit against our own ledger before crediting a Better balance.
  */
 const secretKey = process.env.UNIFOLD_SECRET_KEY;
 if (!secretKey) {
@@ -15,7 +15,7 @@ if (!secretKey) {
 export const unifold = secretKey ? new Unifold(secretKey) : null;
 
 /**
- * Where bridged funds land. Echo settles in USDC; the Unifold sandbox only
+ * Where bridged funds land. Better settles in USDC; the Unifold sandbox only
  * supports EVM testnets, so the demo treasury receives USDC on Base Sepolia
  * (chain id 84532). In live mode this would be Solana USDC
  * (destinationChainType: "solana", the USDC mint as tokenAddress).

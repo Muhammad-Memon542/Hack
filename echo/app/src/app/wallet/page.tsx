@@ -31,10 +31,12 @@ interface ResponsiblePlay {
   coolOff: boolean;
 }
 
+const IMPACT_FEE = 0.015; // 1.5% Better Impact Fee — funds carbon offsets & charity
+
 const METHODS: Record<DepositMethod, { label: string; fee: string; feeNum: number; rewards: string; rewardsNum: number; net: string; eta: string; icon: string }> = {
-  bank:  { label: "Bank Transfer", fee: "0%", feeNum: 0, rewards: "—", rewardsNum: 0, net: "0%", eta: "1–3 days", icon: "🏦" },
-  card:  { label: "Debit / Credit Card", fee: "2.5%", feeNum: 0.025, rewards: "1% back", rewardsNum: 0.01, net: "1.5%", eta: "Instant", icon: "💳" },
-  usdc:  { label: "USDC (on-chain)", fee: "1%", feeNum: 0.01, rewards: "—", rewardsNum: 0, net: "1%", eta: "~1 min", icon: "🪙" },
+  bank:  { label: "Bank Transfer", fee: "1.5%", feeNum: IMPACT_FEE, rewards: "—", rewardsNum: 0, net: "1.5%", eta: "1–3 days", icon: "🏦" },
+  card:  { label: "Debit / Credit Card", fee: "4%", feeNum: 0.025 + IMPACT_FEE, rewards: "1% back", rewardsNum: 0.01, net: "3%", eta: "Instant", icon: "💳" },
+  usdc:  { label: "USDC (on-chain)", fee: "2.5%", feeNum: 0.01 + IMPACT_FEE, rewards: "—", rewardsNum: 0, net: "2.5%", eta: "~1 min", icon: "🪙" },
 };
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -213,7 +215,7 @@ export default function WalletPage() {
     const blob = new Blob([header + rows], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = "echo-statement.csv"; a.click();
+    a.href = url; a.download = "better-statement.csv"; a.click();
     URL.revokeObjectURL(url);
   }, [displayTxs]);
 
@@ -244,14 +246,23 @@ export default function WalletPage() {
         ],
       });
 
-      if (fee > 0) {
+      const processingFee = fee - amt * IMPACT_FEE;
+      if (processingFee > 0.001) {
         baseTxs.push({
-          id: uid(), type: "fee", description: `${method.label} fee (${method.fee})`,
-          amount: -fee, balance: balanceUsdc + amt - fee,
+          id: uid(), type: "fee", description: `${method.label} processing fee`,
+          amount: -processingFee, balance: balanceUsdc + amt - processingFee,
           ts: now, idempotencyKey: `idem_${uid()}`, ref: `FEE-${uid().toUpperCase()}`, status: "settled",
           timeline: [{ label: "Applied", ts: now }],
         });
       }
+
+      const impactFee = amt * IMPACT_FEE;
+      baseTxs.push({
+        id: uid(), type: "fee", description: `🌱 Better Impact Fee (1.5%) — carbon offsets & charity`,
+        amount: -impactFee, balance: balanceUsdc + amt - fee,
+        ts: now, idempotencyKey: `idem_${uid()}`, ref: `IMP-${uid().toUpperCase()}`, status: "settled",
+        timeline: [{ label: "Donated to environmental charities", ts: now }],
+      });
 
       if (reward > 0) {
         baseTxs.push({
@@ -384,9 +395,13 @@ export default function WalletPage() {
                   </div>
                 </div>
 
+                <div className="impact-fee-note">
+                  🌱 Includes 1.5% Better Impact Fee — offsets carbon footprint &amp; funds environmental charities
+                </div>
+
                 <button
                   className="btn btn-primary btn-block"
-                  style={{ marginTop: "1rem", padding: "0.7rem" }}
+                  style={{ marginTop: "0.75rem", padding: "0.7rem" }}
                   disabled={amt <= 0}
                   onClick={executeDeposit}
                 >
@@ -495,6 +510,30 @@ export default function WalletPage() {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Impact dashboard */}
+          <div className="panel impact-panel">
+            <h3 style={{ marginBottom: "0.7rem" }}>🌱 Your Impact</h3>
+            <div className="impact-stat-grid">
+              <div className="impact-stat">
+                <div className="impact-stat-val">${(totalDebits * 0.015).toFixed(2)}</div>
+                <div className="impact-stat-label">Donated to Charity</div>
+              </div>
+              <div className="impact-stat">
+                <div className="impact-stat-val">{(totalDebits * 0.015 * 2.5).toFixed(1)} kg</div>
+                <div className="impact-stat-label">CO2 Offset</div>
+              </div>
+            </div>
+            <div className="impact-info">
+              <strong>Where it goes</strong>
+              <p>50% of every winning payout and 1.5% of every deposit funds verified environmental charities. We partner with carbon offset programs to neutralize the footprint of every transaction on Better.</p>
+            </div>
+            <div className="impact-partners">
+              <span className="impact-partner">🌲 One Tree Planted</span>
+              <span className="impact-partner">🌊 Ocean Cleanup</span>
+              <span className="impact-partner">⚡ Renewable Energy Fund</span>
+            </div>
           </div>
 
           {/* Responsible play */}

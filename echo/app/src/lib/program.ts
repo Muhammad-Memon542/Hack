@@ -1,9 +1,9 @@
 /**
- * Minimal Anchor-compatible client for echo_protocol.
+ * Minimal Anchor-compatible client for better_protocol.
  *
  * Instruction data = 8-byte discriminator (sha256("global:<ix_name>")[0..8])
  * followed by Borsh-encoded args. Account ordering mirrors the #[derive(Accounts)]
- * struct field order in programs/echo_protocol/src/instructions.rs — keep in sync.
+ * struct field order in programs/better_protocol/src/instructions.rs — keep in sync.
  */
 import { sha256 } from "@noble/hashes/sha256";
 import {

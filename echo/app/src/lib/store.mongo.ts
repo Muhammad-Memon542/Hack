@@ -19,7 +19,7 @@ import {
 const liveStamp = () => new Date(NOW - Math.floor(Math.random() * 150) * 1000).toISOString();
 
 /**
- * MongoDB-backed store — the production persistence for Echo's social + market
+ * MongoDB-backed store — the production persistence for Better's social + market
  * state. Mirrors the file backend (store.file.ts) function-for-function so the
  * API routes are backend-agnostic; the dispatcher in store.ts picks between the
  * two based on whether MONGODB_URI is set.

@@ -73,7 +73,7 @@ function UserTable({ pool, cat, meId }: { pool: User[]; cat: Category; meId: str
         <tr>
           <th>#</th>
           <th>Forecaster</th>
-          <th className="right">Echo Score</th>
+          <th className="right">Better Score</th>
           <th className="right">{metricLabel}</th>
           <th className="right">Trend</th>
         </tr>

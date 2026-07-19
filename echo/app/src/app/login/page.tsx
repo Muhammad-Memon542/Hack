@@ -3,7 +3,7 @@ import { auth0Enabled } from "@/lib/auth0";
 import { LoginPanel } from "@/components/LoginPanel";
 
 export const metadata: Metadata = {
-  title: "Log in — Echo",
+  title: "Log in — Better",
 };
 
 export default function LoginPage() {
