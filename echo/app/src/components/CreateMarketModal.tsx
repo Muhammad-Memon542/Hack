@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useApp } from "@/app/providers";
 import { subjectByWallet } from "@/lib/mock";
 import { StatusBadge, OddsBar } from "./primitives";
@@ -19,6 +19,13 @@ export function CreateMarketModal() {
   const [subjectWallet, setSubjectWallet] = useState("");
   const [subjectTouched, setSubjectTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const pendingRef = useRef(false);
+  const [safetyResult, setSafetyResult] = useState<{
+    safe: boolean;
+    reason: string;
+    suggestion: string;
+  } | null>(null);
 
   const subjectMatch = useMemo(
     () => (isValidAddress(subjectWallet) ? subjectByWallet(subjectWallet.trim()) : undefined),
@@ -42,10 +49,37 @@ export function CreateMarketModal() {
     setSubjectWallet("");
     setSubjectTouched(false);
     setSubmitting(false);
+    setChecking(false);
+    setSafetyResult(null);
   };
 
-  const submit = async () => {
-    if (!canSubmit) return;
+  const runSafetyCheck = async () => {
+    if (!canSubmit || checking || submitting || pendingRef.current) return;
+    pendingRef.current = true;
+    setChecking(true);
+    setSafetyResult(null);
+    try {
+      const res = await fetch("/api/safety-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: question.trim(), criteria: criteria.trim() }),
+      });
+      const data = await res.json();
+      if (data.safe) {
+        await doCreate();
+      } else {
+        setSafetyResult(data);
+        setChecking(false);
+      }
+    } catch {
+      await doCreate();
+    } finally {
+      pendingRef.current = false;
+    }
+  };
+
+  const doCreate = async () => {
+    setChecking(false);
     setSubmitting(true);
     const wallet = subjectWallet.trim() === "" ? null : subjectWallet.trim();
     const id = await createMarket({
@@ -56,6 +90,11 @@ export function CreateMarketModal() {
     });
     close();
     if (id) router.push(`/market/${id}`);
+  };
+
+  const applySuggestion = () => {
+    if (safetyResult?.suggestion) setQuestion(safetyResult.suggestion);
+    setSafetyResult(null);
   };
 
   return (
@@ -151,8 +190,34 @@ export function CreateMarketModal() {
           )}
         </div>
 
-        <button className="btn btn-primary btn-block" disabled={!canSubmit} onClick={submit}>
-          {submitting ? "Creating…" : "Create market"}
+        {safetyResult && !safetyResult.safe && (
+          <div className="safety-warning">
+            <div className="safety-warning-title">This market may not align with our values</div>
+            <div className="safety-warning-reason">{safetyResult.reason}</div>
+            {safetyResult.suggestion && (
+              <div className="safety-suggestion">
+                <div className="safety-suggestion-label">Suggested alternative:</div>
+                <div className="safety-suggestion-text">{safetyResult.suggestion}</div>
+                <button className="btn btn-secondary safety-apply-btn" onClick={applySuggestion}>
+                  Use suggestion
+                </button>
+              </div>
+            )}
+            <button
+              className="btn safety-dismiss-btn"
+              onClick={() => setSafetyResult(null)}
+            >
+              Edit my question
+            </button>
+          </div>
+        )}
+
+        <button
+          className="btn btn-primary btn-block"
+          disabled={!canSubmit || checking || submitting || (safetyResult !== null && !safetyResult.safe)}
+          onClick={runSafetyCheck}
+        >
+          {checking ? "Checking safety..." : submitting ? "Creating..." : "Create market"}
         </button>
       </div>
     </div>
