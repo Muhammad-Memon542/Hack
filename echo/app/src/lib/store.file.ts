@@ -48,7 +48,7 @@ interface StoreState {
 }
 
 // Bump to force a reseed after schema/seed changes during development.
-const SEED_VERSION = 4;
+const SEED_VERSION = 6;
 const DATA_DIR = path.join(process.cwd(), ".data");
 const STORE_PATH = path.join(DATA_DIR, "better.json");
 
@@ -335,6 +335,20 @@ export function toggleLike(input: {
       ? list.filter((id) => id !== input.userId)
       : [...list, input.userId];
     return { ok: true, likes: s.commentLikes[input.commentId].length, liked: !liked };
+  });
+}
+
+export function resolveMarket(input: {
+  marketId: string;
+  outcome: Side;
+}): Promise<{ ok: boolean; error?: string }> {
+  return withStore((s) => {
+    const market = s.markets.find((m) => m.id === input.marketId);
+    if (!market) return { ok: false, error: "market not found" };
+    market.status = "SETTLED";
+    market.outcome = input.outcome;
+    market.resolvedAt = new Date().toISOString();
+    return { ok: true };
   });
 }
 

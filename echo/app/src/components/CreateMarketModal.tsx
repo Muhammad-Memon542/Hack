@@ -16,6 +16,7 @@ export function CreateMarketModal() {
   const [question, setQuestion] = useState("");
   const [criteria, setCriteria] = useState("");
   const [closesAt, setClosesAt] = useState("");
+  const [image, setImage] = useState("");
   const [subjectWallet, setSubjectWallet] = useState("");
   const [subjectTouched, setSubjectTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -46,6 +47,7 @@ export function CreateMarketModal() {
     setQuestion("");
     setCriteria("");
     setClosesAt("");
+    setImage("");
     setSubjectWallet("");
     setSubjectTouched(false);
     setSubmitting(false);
@@ -65,14 +67,25 @@ export function CreateMarketModal() {
         body: JSON.stringify({ question: question.trim(), criteria: criteria.trim() }),
       });
       const data = await res.json();
-      if (data.safe) {
+      if (data.safe === true) {
         await doCreate();
       } else {
-        setSafetyResult(data);
+        setSafetyResult({
+          safe: false,
+          reason: data.reason || "This market could not be verified as safe.",
+          suggestion: data.suggestion || "",
+        });
         setChecking(false);
       }
     } catch {
-      await doCreate();
+      // Fail closed: if we can't reach the safety check, block the market
+      // rather than publishing something unreviewed.
+      setSafetyResult({
+        safe: false,
+        reason: "Couldn't reach the safety check. Please try again.",
+        suggestion: "",
+      });
+      setChecking(false);
     } finally {
       pendingRef.current = false;
     }
@@ -87,6 +100,7 @@ export function CreateMarketModal() {
       description: criteria.trim(),
       closesAt: new Date(closesAt).toISOString(),
       subjectWallet: wallet,
+      image: image.trim() || undefined,
     });
     close();
     if (id) router.push(`/market/${id}`);
@@ -115,7 +129,7 @@ export function CreateMarketModal() {
           <input
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Will Amir land the backflip at Saturday's meetup?"
+            placeholder="Will Deshawn land the backflip at Saturday's cookout?"
           />
           {question.length > 0 && !questionValid && (
             <div className="hint err">Give it at least a few words.</div>
@@ -129,6 +143,24 @@ export function CreateMarketModal() {
             onChange={(e) => setCriteria(e.target.value)}
             placeholder="How will this resolve? Be specific — this is what proposers and disputers argue over."
           />
+        </div>
+
+        <div className="field">
+          <label>Cover image (optional)</label>
+          <input
+            value={image}
+            onChange={(e) => setImage(e.target.value)}
+            placeholder="Paste an image URL (https://...)"
+          />
+          {image.trim() !== "" && !/^https?:\/\/.+/.test(image.trim()) && (
+            <div className="hint err">Enter a valid image URL starting with http(s)://</div>
+          )}
+          {image.trim() !== "" && /^https?:\/\/.+/.test(image.trim()) && (
+            <div className="img-preview">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={image.trim()} alt="Preview" onError={(e) => (e.currentTarget.style.display = "none")} onLoad={(e) => (e.currentTarget.style.display = "block")} />
+            </div>
+          )}
         </div>
 
         <div className="field">

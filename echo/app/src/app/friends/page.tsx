@@ -199,7 +199,7 @@ function FriendsLeaderboard({ friends, me }: { friends: User[]; me: User }) {
 
 function BetTogether() {
   const invites = [
-    { id: "g1", title: "Will Amir land the backflip?", from: "park_ranger", status: "pending", members: 4 },
+    { id: "g1", title: "Will Deshawn land the backflip at the cookout?", from: "park_ranger", status: "pending", members: 4 },
     { id: "g2", title: "Eastside final — group pool", from: "coach_dee", status: "accepted", members: 7 },
   ];
   return (

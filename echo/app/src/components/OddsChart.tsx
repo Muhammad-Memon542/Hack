@@ -58,7 +58,7 @@ export function OddsChart({ market }: { market: Market }) {
     let v = 50;
     const now = Date.now();
     for (let i = 0; i < N; i++) {
-      v = clamp(v + (target - v) * 0.1 + (rnd() - 0.5) * 9);
+      v = clamp(v + (target - v) * 0.04 + (rnd() - 0.5) * 28);
       pts.push({ t: now - (N - 1 - i) * 60_000, yes: v });
     }
     pts[pts.length - 1].yes = target;
@@ -84,7 +84,7 @@ export function OddsChart({ market }: { market: Market }) {
     const id = setInterval(() => {
       setSeries((prev) => {
         const last = prev[prev.length - 1].yes;
-        const v = clamp(last + (target - last) * 0.25 + (Math.random() - 0.5) * 4);
+        const v = clamp(last + (target - last) * 0.06 + (Math.random() - 0.5) * 22);
         return [...prev.slice(1), { t: Date.now(), yes: v }];
       });
     }, 2000);

@@ -39,7 +39,7 @@ export interface Snapshot {
   commentLikes: Record<string, string[]>;
 }
 
-const SEED_VERSION = 4;
+const SEED_VERSION = 6;
 const noId = { projection: { _id: 0 } };
 const genId = (prefix: string) =>
   `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -283,6 +283,20 @@ export async function toggleLike(input: {
   }
   const after = await c.likes.findOne({ _id: input.commentId });
   return { ok: true, likes: after?.userIds?.length ?? 0, liked: !liked };
+}
+
+export async function resolveMarket(input: {
+  marketId: string;
+  outcome: "YES" | "NO";
+}): Promise<{ ok: boolean; error?: string }> {
+  await ensureSeeded();
+  const c = await collections();
+  const result = await c.markets.updateOne(
+    { _id: input.marketId },
+    { $set: { status: "SETTLED", outcome: input.outcome, resolvedAt: new Date().toISOString() } }
+  );
+  if (result.matchedCount === 0) return { ok: false, error: "market not found" };
+  return { ok: true };
 }
 
 // ---------------- live bot trading engine ----------------

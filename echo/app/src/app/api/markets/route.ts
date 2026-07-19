@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
   const closesAt = String(body?.closesAt ?? "").trim();
   const subjectWallet = body?.subjectWallet ? String(body.subjectWallet).trim() : null;
   const category = body?.category;
+  const image = body?.image ? String(body.image).trim() : undefined;
 
   if (!userId || question.length < 6 || description.length < 6 || !closesAt) {
     return NextResponse.json({ error: "missing or too-short fields" }, { status: 400 });
@@ -24,6 +25,7 @@ export async function POST(req: NextRequest) {
     closesAt,
     subjectWallet,
     category,
+    image,
   });
   if (!res.ok) return NextResponse.json({ error: res.error }, { status: 400 });
   return NextResponse.json({ ok: true, market: res.market });

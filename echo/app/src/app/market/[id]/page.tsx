@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/app/providers";
 import {
   formatDateTime,
@@ -17,12 +18,35 @@ import { BetPanel } from "@/components/BetPanel";
 import { Discussion } from "@/components/Discussion";
 import { OddsChart } from "@/components/OddsChart";
 import { LiveTrades } from "@/components/LiveTrades";
+import { WinCelebration } from "@/components/WinCelebration";
 
 export default function MarketDetailPage() {
   const params = useParams<{ id: string }>();
   const search = useSearchParams();
   const { markets, isFollowingMarket, toggleFollowMarket } = useApp();
   const market = markets.find((m) => m.id === params.id);
+
+  const prevStatus = useRef<string | undefined>(undefined);
+  const hasSeenOpen = useRef(false);
+  const [celebrate, setCelebrate] = useState(false);
+
+  useEffect(() => {
+    const status = market?.status;
+    const outcome = market?.outcome;
+    if (status === "OPEN") hasSeenOpen.current = true;
+
+    if (
+      hasSeenOpen.current &&
+      prevStatus.current !== "SETTLED" &&
+      status === "SETTLED" &&
+      outcome === "YES"
+    ) {
+      setCelebrate(true);
+      const t = setTimeout(() => setCelebrate(false), 6000);
+      return () => clearTimeout(t);
+    }
+    prevStatus.current = status;
+  }, [market?.status, market?.outcome]);
 
   if (!market) {
     return (
@@ -50,6 +74,7 @@ export default function MarketDetailPage() {
 
   return (
     <div style={{ marginTop: "1.5rem" }}>
+      <WinCelebration active={celebrate} />
       <Link href="/markets" className="crumb">
         ← All markets
       </Link>

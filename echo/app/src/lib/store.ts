@@ -26,3 +26,4 @@ export const addComment = backend.addComment;
 export const toggleFollow = backend.toggleFollow;
 export const toggleLike = backend.toggleLike;
 export const simulateBets = backend.simulateBets;
+export const resolveMarket = backend.resolveMarket;

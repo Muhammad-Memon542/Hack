@@ -26,6 +26,7 @@ interface CreateMarketInput {
   description: string;
   closesAt: string;
   subjectWallet: string | null;
+  image?: string;
 }
 
 interface MutationResult {
@@ -211,17 +212,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
             const data = (await res.json()) as {
               events: LiveBet[];
               markets: { id: string; yesPool: number; noPool: number; participants: number }[];
+              settled?: { id: string; status: string; outcome: string | null; resolvedAt: string | null }[];
             };
-            if (data.markets?.length) {
+            if (data.markets?.length || data.settled?.length) {
               setMarkets((prev) => {
                 const byId = new Map(data.markets.map((t) => [t.id, t]));
+                const settledById = new Map((data.settled ?? []).map((s) => [s.id, s]));
                 const next = prev.map((m) => {
                   const t = byId.get(m.id);
-                  return t
-                    ? { ...m, yesPool: t.yesPool, noPool: t.noPool, participants: t.participants }
-                    : m;
+                  const s = settledById.get(m.id);
+                  let updated = m;
+                  if (t) updated = { ...updated, yesPool: t.yesPool, noPool: t.noPool, participants: t.participants };
+                  if (s && m.status !== "SETTLED") updated = { ...updated, status: s.status as Market["status"], outcome: s.outcome as Market["outcome"], resolvedAt: s.resolvedAt };
+                  return updated;
                 });
-                hydrateFromServer({ markets: next }); // keep mock helpers in sync
+                hydrateFromServer({ markets: next });
                 return next;
               });
             }
@@ -325,6 +330,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             description: input.description,
             closesAt: input.closesAt,
             subjectWallet: input.subjectWallet,
+            image: input.image || undefined,
           }),
         });
         const data = await res.json();
