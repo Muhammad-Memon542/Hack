@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useApp } from "@/app/providers";
 import { relativeTime } from "@/lib/mock";
 import { Avatar } from "./primitives";
@@ -29,7 +30,9 @@ export function LiveTrades({ marketId }: { marketId: string }) {
         <div className="trade-list">
           {trades.map((b) => (
             <div key={b.id} className="trade-row">
-              <Avatar emoji={b.avatar} color={b.color} size={26} />
+              <Link href={`/u/${b.username}`} className="trade-avatar" aria-label={`View @${b.username}`}>
+                <Avatar emoji={b.avatar} color={b.color} size={26} />
+              </Link>
               <div className="trade-main">
                 <div className="trade-line">
                   <UserName username={b.username} />
