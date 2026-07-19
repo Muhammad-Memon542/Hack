@@ -3,10 +3,10 @@
   "configurations": [
     {
       "name": "echo-app",
-      "runtimeExecutable": "/Users/aliciachandra/.local/node/bin/node",
-      "runtimeArgs": ["node_modules/next/dist/bin/next", "dev"],
-      "cwd": "Hack/echo/app",
-      "port": 3000
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "-p", "3999"],
+      "cwd": "echo/app",
+      "port": 3999
     }
   ]
 }

@@ -18,7 +18,7 @@ export function LiveTicker() {
   if (!open) {
     return (
       <button className="live-reopen" onClick={() => setOpen(true)} aria-label="show live trades">
-        🔴 LIVE
+        LIVE
       </button>
     );
   }

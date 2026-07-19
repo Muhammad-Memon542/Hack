@@ -93,7 +93,7 @@ export function CreateMarketModal() {
         </div>
 
         <div className="field">
-          <label>Trading closes / resolution time 📅</label>
+          <label>Trading closes / resolution time</label>
           <input
             type="datetime-local"
             value={closesAt}
@@ -146,7 +146,7 @@ export function CreateMarketModal() {
           </div>
           {subjectWallet.trim() !== "" && subjectFormatValid && (
             <div className={`pyr ${subjectMatch?.verified ? "" : "unverified"}`}>
-              ⚡ yield routes to {subjectMatch?.verified ? subjectMatch.name : "unverified wallet"}
+              Yield routes to {subjectMatch?.verified ? subjectMatch.name : "unverified wallet"}
             </div>
           )}
         </div>

@@ -116,7 +116,7 @@ export function FeedCard({ item }: { item: FeedItem }) {
             Resolved: <b style={{ color: item.data.outcome === "YES" ? "var(--yes)" : "var(--no)" }}>
               {String(item.data.outcome)}
             </b>{" "}
-            ✅
+            — confirmed
           </div>
           <Link href={`/market/${market.id}`} className="feed-title">
             {market.question}

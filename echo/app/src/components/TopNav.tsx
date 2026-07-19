@@ -47,15 +47,10 @@ export function TopNav() {
 
           {connected ? (
             <>
-              <button
-                className="balance-pill"
-                onClick={() => setDepositOpen(true)}
-                aria-label="add funds"
-                title="Add funds via Unifold"
-              >
+              <Link href="/wallet" className="balance-pill" title="View wallet">
                 <span className="balance-amt">${balanceUsdc.toFixed(2)}</span>
                 <span className="balance-plus">+ Add</span>
-              </button>
+              </Link>
 
               <div style={{ position: "relative" }}>
                 <button className="icon-round" aria-label="notifications" onClick={() => setOpenMenu(openMenu === "bell" ? null : "bell")}>
@@ -93,10 +88,12 @@ export function TopNav() {
                       </button>
                     ))}
                     <div className="menu-sep" />
-                    <button className="menu-item" onClick={() => { router.push(`/u/${me.username}`); setOpenMenu(null); }}>👤 Profile</button>
-                    <button className="menu-item" onClick={() => { router.push("/settings"); setOpenMenu(null); }}>⚙️ Settings</button>
+                    <button className="menu-item" onClick={() => { router.push(`/u/${me.username}`); setOpenMenu(null); }}>Profile</button>
+                    <button className="menu-item" onClick={() => { router.push("/wallet"); setOpenMenu(null); }}>Wallet</button>
+                    <button className="menu-item" onClick={() => { router.push("/trade"); setOpenMenu(null); }}>Trade</button>
+                    <button className="menu-item" onClick={() => { router.push("/settings"); setOpenMenu(null); }}>Settings</button>
                     <div className="menu-sep" />
-                    <button className="menu-item" onClick={() => { logout(); setOpenMenu(null); }}>⏻ Log out</button>
+                    <button className="menu-item" onClick={() => { logout(); setOpenMenu(null); }}>Log out</button>
                   </div>
                 )}
               </div>
@@ -138,7 +135,7 @@ function NotificationsPanel({ onClose }: { onClose: () => void }) {
                 <Avatar emoji={actor.avatar} color={actor.color} size={22} src={actor.picture} />
               ) : (
                 <span style={{ width: 22, textAlign: "center" }}>
-                  {n.type === "resolved" ? "✅" : n.type === "yield" ? "⚡" : "🎯"}
+                  {n.type === "resolved" ? "R" : n.type === "yield" ? "Y" : "N"}
                 </span>
               )}
               <span style={{ color: "var(--text)", fontSize: "0.86rem", lineHeight: 1.35, whiteSpace: "normal" }}>

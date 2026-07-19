@@ -102,6 +102,7 @@ interface AppState {
 
   // Unifold-funded USDC balance (server ledger).
   balanceUsdc: number;
+  setBalanceUsdc: (v: number | ((prev: number) => number)) => void;
   refreshState: () => Promise<void>;
   depositOpen: boolean;
   setDepositOpen: (v: boolean) => void;
@@ -491,6 +492,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     createOpen,
     setCreateOpen,
     balanceUsdc,
+    setBalanceUsdc,
     refreshState,
     depositOpen,
     setDepositOpen,

@@ -30,7 +30,7 @@ export function BetPanel({ market }: { market: Market }) {
           Connect your wallet to take a side on this market.
         </div>
         <button className="btn btn-primary btn-block" onClick={connect}>
-          👛 Connect wallet
+          Connect wallet
         </button>
       </div>
     );
@@ -153,7 +153,7 @@ export function BetPanel({ market }: { market: Market }) {
         </div>
       )}
 
-      {placed && <div className="toast">✅ {placed}</div>}
+      {placed && <div className="toast">{placed}</div>}
     </div>
   );
 }

@@ -163,7 +163,7 @@ function CommentNode({ node, market, depth }: { node: Node; market: Market; dept
           <button onClick={() => setReplying((v) => !v)}>Reply</button>
         )}
         <button onClick={() => setTips((t) => Math.round((t + 0.5) * 100) / 100)}>
-          💸 Tip {tips > 0 && <span className="tip-badge">· {tips} USDC</span>}
+          Tip {tips > 0 && <span className="tip-badge">· {tips} USDC</span>}
         </button>
       </div>
 
